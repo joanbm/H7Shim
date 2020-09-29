@@ -35,6 +35,14 @@ struct Resolution {
 #define UNUSED(x) UNUSED_ ## x
 #endif
 
+#if 0
+#define LOG_EMULATED() printf("[!] %s EMULATED!\n", __func__)
+#else
+#define LOG_EMULATED() do { } while(0)
+#endif
+
+#define STUB() do { printf("[!] %s STUB!\n", __func__); raise(SIGSEGV); } while(0)
+
 static uint8_t *memcontrolblock = NULL;
 static uint32_t surfaceptr[0x1000000/4];
 static uint32_t frame_counter = 0;
@@ -125,7 +133,7 @@ static uint64_t getTimeStampMs()
 
 static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_GetStatus(void *cominterface, uint32_t *status)
 {
-    printf("[!] DSOUND_SoundBufferImpl_GetStatus EMULATED!\n");
+    LOG_EMULATED();
 
     assert(cominterface != NULL);
     assert(status != NULL);
@@ -136,21 +144,20 @@ static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_GetStatus(void *com
 
 static __attribute__((stdcall)) void DSOUND_SoundBufferImpl_Restore()
 {
-    printf("[!] DSOUND_SoundBufferImpl_Restore STUB!\n");
-    raise(SIGSEGV);
+    STUB();
 }
 
 static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_Lock(
     void *cominterface,
-    uint32_t dwOffset, uint32_t dwBytes,
+    uint32_t UNUSED(dwOffset), uint32_t dwBytes,
     void **ppvAudioPtr1, uint32_t *pdwAudioBytes1,
     void **UNUSED(ppvAudioPtr2), uint32_t *UNUSED(pdwAudioBytes2),
     uint32_t UNUSED(dwFlags))
 {
-    printf("[!] DSOUND_SoundBufferImpl_Lock EMULATED!\n");
+    LOG_EMULATED();
 
 
-    printf("--> AUDIO OFFSET %u BYTES %u\n", dwOffset, dwBytes);
+    //printf("--> AUDIO OFFSET %u BYTES %u\n", dwOffset, dwBytes);
 
     *ppvAudioPtr1 = samplebfr;
     *pdwAudioBytes1 = dwBytes;
@@ -163,10 +170,10 @@ static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_Unlock(
     void *cominterface, void *UNUSED(pvAudioPtr1), uint32_t dwAudioBytes1,
     void *UNUSED(pvAudioPtr2), uint32_t UNUSED(dwAudioBytes2))
 {
-    printf("[!] DSOUND_SoundBufferImpl_Unlock EMULATED!\n");
+    LOG_EMULATED();
     assert(cominterface != NULL);
 
-    printf("--> AUDIO UNLOCK %u BYTES\n", dwAudioBytes1);
+    //printf("--> AUDIO UNLOCK %u BYTES\n", dwAudioBytes1);
 
     char audio_name[100];
     sprintf(audio_name, "/tmp/h7audio_%06u.raw", audio_counter);
@@ -180,7 +187,7 @@ static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_Unlock(
 
 static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_SetFormat(void *cominterface, void *format)
 {
-    printf("[!] DSOUND_SoundBufferImpl_SetFormat EMULATED!\n");
+    LOG_EMULATED();
 
     assert(cominterface != NULL);
     assert(format != NULL);
@@ -194,7 +201,7 @@ static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_Play(
          uint32_t UNUSED(dwPriority),
          uint32_t UNUSED(dwFlags))
 {
-    printf("[!] DSOUND_SoundBufferImpl_Play EMULATED!\n");
+    LOG_EMULATED();
     assert(cominterface != NULL);
 
     return 0;
@@ -203,7 +210,7 @@ static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_Play(
 static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_GetCurrentPosition(
     void *cominterface, uint32_t *pdwCurrentPlayCursor, uint32_t *pdwCurrentWriteCursor)
 {
-    printf("[!] DSOUND_SoundBufferImpl_GetCurrentPosition EMULATED!\n");
+    LOG_EMULATED();
 
     assert(cominterface != NULL);
     assert(pdwCurrentPlayCursor != NULL);
@@ -221,14 +228,14 @@ static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_GetCurrentPosition(
 
     *pdwCurrentPlayCursor = (playedSamples % bufferSizeSamples) * 2;
     *pdwCurrentWriteCursor = *pdwCurrentPlayCursor; // Don't matter
-    printf("--> SET AUDIO TO %u\n", *pdwCurrentPlayCursor);
+    //printf("--> SET AUDIO TO %u\n", *pdwCurrentPlayCursor);
 
     return 0;
 }
 
 static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_Stop(void *cominterface)
 {
-    printf("[!] DSOUND_SoundBufferImpl_Stop EMULATED!\n");
+    LOG_EMULATED();
 
     assert(cominterface != NULL);
     return 0;
@@ -236,7 +243,7 @@ static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_Stop(void *cominter
 
 static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_Release(void *cominterface)
 {
-    printf("[!] DSOUND_SoundBufferImpl_Release EMULATED!\n");
+    LOG_EMULATED();
 
     assert(cominterface != NULL);
     return 0;
@@ -262,7 +269,7 @@ static struct DSound_SoundBufferImpl_Object
 static __attribute__((stdcall)) void *DSOUND_CreateSoundBuffer(
     void *cominterface, void *buffer_desc, void **ppdsb, void *unk)
 {
-    printf("[!] DSOUND_CreateSoundBuffer EMULATED!\n");
+    LOG_EMULATED();
 
     assert(cominterface != NULL);
     assert(buffer_desc != NULL);
@@ -276,7 +283,7 @@ static __attribute__((stdcall)) void *DSOUND_CreateSoundBuffer(
 static __attribute__((stdcall)) void *DSOUND_SetCooperativeLevel(
     void *cominterface, void *hwnd, uint32_t UNUSED(flags))
 {
-    printf("[!] DSOUND_SetCooperativeLevel EMULATED!\n");
+    LOG_EMULATED();
 
     assert(cominterface != NULL);
     assert(hwnd == (void *)12346);
@@ -286,7 +293,7 @@ static __attribute__((stdcall)) void *DSOUND_SetCooperativeLevel(
 
 static __attribute__((stdcall)) void *DSOUND_Release(void *cominterface)
 {
-    printf("[!] DSOUND_Release EMULATED!\n");
+    LOG_EMULATED();
 
     assert(cominterface != NULL);
     return 0;
@@ -306,7 +313,7 @@ static struct DSOUND_Object
 static __attribute__((stdcall)) void *DSOUND_DirectSoundCreate(
    void *guid, void **lpds, void *unkouter)
 {
-    printf("[!] DSOUND_DirectSoundCreate EMULATED!\n");
+    LOG_EMULATED();
 
     assert(guid == NULL);
     assert(lpds != NULL);
@@ -318,7 +325,7 @@ static __attribute__((stdcall)) void *DSOUND_DirectSoundCreate(
 
 static __attribute__((stdcall)) char *KERNEL32_GetCommandLineA()
 {
-    printf("[!] KERNEL32_GetCommandLineA EMULATED!\n");
+    LOG_EMULATED();
 
     static char *COMMANDLINE = "C:\\HEAVEN7W.EXE";
     return COMMANDLINE;
@@ -326,7 +333,7 @@ static __attribute__((stdcall)) char *KERNEL32_GetCommandLineA()
 
 static __attribute__((stdcall)) void *KERNEL32_GlobalFree(void *ptr)
 {
-    printf("[!] KERNEL32_GlobalFree EMULATED!\n");
+    LOG_EMULATED();
     free(ptr);
     return NULL;
 }
@@ -336,17 +343,17 @@ static __attribute__((stdcall)) void *KERNEL32_CreateThread(
       void *lpParameter, uint32_t UNUSED(dwCreationFlags), uint32_t *UNUSED(lpThreadId)
 )
 {
-    printf("[!] KERNEL32_CreateThread EMULATED!\n");
+    LOG_EMULATED();
 
     pthread_t *thread = malloc(sizeof(pthread_t));
     pthread_create(thread, NULL, lpStartAddress, lpParameter);
-    printf("thread is: %p\n", thread);
+    //printf("thread is: %p\n", thread);
     return thread;
 }
 
 static __attribute__((stdcall)) void *KERNEL32_GetModuleHandleA(char *moduleName)
 {
-    printf("[!] KERNEL32_GetModuleHandleA EMULATED!\n");
+    LOG_EMULATED();
 
     assert(moduleName == NULL);
     return (void *)IMAGEBASE;
@@ -354,7 +361,7 @@ static __attribute__((stdcall)) void *KERNEL32_GetModuleHandleA(char *moduleName
 
 static __attribute__((stdcall)) void KERNEL32_LeaveCriticalSection(void *pcs)
 {
-    printf("[!] KERNEL32_LeaveCriticalSection EMULATED!\n");
+    LOG_EMULATED();
 
     pthread_mutex_t *mutex = *((pthread_mutex_t **)pcs);
     pthread_mutex_unlock(mutex);
@@ -362,13 +369,13 @@ static __attribute__((stdcall)) void KERNEL32_LeaveCriticalSection(void *pcs)
 
 static __attribute__((stdcall)) void KERNEL32_ExitProcess(uint32_t exitcode)
 {
-    printf("[!] KERNEL32_ExitProcess EMULATED!\n");
+    LOG_EMULATED();
     exit((int)exitcode);
 }
 
 static __attribute__((stdcall)) void KERNEL32_InitializeCriticalSection(void *pcs)
 {
-    printf("[!] KERNEL32_InitializeCriticalSection EMULATED!\n");
+    LOG_EMULATED();
 
     pthread_mutex_t *mutex = malloc(sizeof(pthread_mutex_t));
     pthread_mutex_init(mutex, NULL);
@@ -377,14 +384,14 @@ static __attribute__((stdcall)) void KERNEL32_InitializeCriticalSection(void *pc
 
 static __attribute__((stdcall)) uint32_t KERNEL32_SetThreadPriority(void *UNUSED(thread), int UNUSED(priority))
 {
-    printf("[!] KERNEL32_SetThreadPriority EMULATED!\n");
+    LOG_EMULATED();
 
     return 1;
 }
 
 static __attribute__((stdcall)) void KERNEL32_EnterCriticalSection(void *pcs)
 {
-    printf("[!] KERNEL32_EnterCriticalSection EMULATED!\n");
+    LOG_EMULATED();
 
     pthread_mutex_t *mutex = *((pthread_mutex_t **)pcs);
     pthread_mutex_lock(mutex);
@@ -392,7 +399,7 @@ static __attribute__((stdcall)) void KERNEL32_EnterCriticalSection(void *pcs)
 
 static __attribute__((stdcall)) uint32_t KERNEL32_CloseHandle(void *object)
 {
-    printf("[!] KERNEL32_CloseHandle EMULATED!\n");
+    LOG_EMULATED();
 
     pthread_t *thread = (pthread_t *)object;
     free(thread);
@@ -402,7 +409,7 @@ static __attribute__((stdcall)) uint32_t KERNEL32_CloseHandle(void *object)
 
 static __attribute__((stdcall)) void KERNEL32_DeleteCriticalSection(void *pcs)
 {
-    printf("[!] KERNEL32_DeleteCriticalSection EMULATED!\n");
+    LOG_EMULATED();
     
     pthread_mutex_t *mutex = *((pthread_mutex_t **)pcs);
     pthread_mutex_destroy(mutex);
@@ -411,7 +418,7 @@ static __attribute__((stdcall)) void KERNEL32_DeleteCriticalSection(void *pcs)
 
 static __attribute__((stdcall)) void *KERNEL32_GlobalAlloc(uint32_t flags, uint32_t memsize)
 {
-    printf("[!] KERNEL32_GlobalAlloc EMULATED!\n");
+    LOG_EMULATED();
 
     assert(flags == 0);
 
@@ -428,7 +435,7 @@ static __attribute__((stdcall)) void *KERNEL32_GlobalAlloc(uint32_t flags, uint3
 
 static __attribute__((stdcall)) void KERNEL32_Sleep(uint32_t timems)
 {
-    printf("[!] KERNEL32_Sleep EMULATED!\n");
+    LOG_EMULATED();
 
     struct timespec ts;
     ts.tv_sec = timems / 1000;
@@ -438,7 +445,7 @@ static __attribute__((stdcall)) void KERNEL32_Sleep(uint32_t timems)
 
 static __attribute__((stdcall)) uint32_t KERNEL32_TerminateThread(void *thread, uint32_t UNUSED(exitCode))
 {
-    printf("[!] KERNEL32_TerminateThread EMULATED!\n");
+    LOG_EMULATED();
 
     pthread_t *rthread = (pthread_t *)thread;
     pthread_cancel(*rthread);
@@ -451,20 +458,19 @@ static __attribute__((stdcall)) void *USER32_CreateWindowExA(
     int UNUSED(x), int UNUSED(y), int UNUSED(width), int UNUSED(height),
     void *UNUSED(hwndParent), void *UNUSED(menu), void *UNUSED(instance), void *UNUSED(pparam))
 {
-    printf("[!] USER32_CreateWindowExA EMULATED!\n");
+    LOG_EMULATED();
 
     return (void *)12346;
 }
 
 static __attribute__((stdcall)) void USER32_EndDialog()
 {
-    printf("[!] USER32_EndDialog STUB!\n");
-    raise(SIGSEGV);
+    STUB();
 }
 
 static __attribute__((stdcall)) uint32_t USER32_OffsetRect(void *rect, int UNUSED(dx), int UNUSED(dy))
 {
-    printf("[!] USER32_OffsetRect EMULATED\n");
+    printf("[!] %s EMULATED\n", __func__);
 
     assert(rect != NULL);
     return 1;
@@ -472,7 +478,7 @@ static __attribute__((stdcall)) uint32_t USER32_OffsetRect(void *rect, int UNUSE
 
 static __attribute__((stdcall)) uint32_t USER32_ClientToScreen(void *hwnd, void *point)
 {
-    printf("[!] USER32_ClientToScreen EMULATED!\n");
+    LOG_EMULATED();
 
     assert(hwnd == (void *)12346);
     assert(point != NULL);
@@ -482,7 +488,7 @@ static __attribute__((stdcall)) uint32_t USER32_ClientToScreen(void *hwnd, void 
 
 static __attribute__((stdcall)) int USER32_GetSystemMetrics(int index)
 {
-    printf("[!] USER32_GetSystemMetrics EMULATED!\n");
+    LOG_EMULATED();
 
     if (index == 0) // SM_CXSCREEN
         return 1920;
@@ -496,20 +502,20 @@ static __attribute__((stdcall)) int USER32_GetSystemMetrics(int index)
 
 static __attribute__((stdcall)) void *USER32_SetCursor(void *UNUSED(cursor))
 {
-    printf("[!] USER32_SetCursor EMULATED!\n");
+    LOG_EMULATED();
     return NULL;
 }
 
 static __attribute__((stdcall)) uint32_t USER32_DestroyWindow(void *hwnd)
 {
-    printf("[!] USER32_DestroyWindow EMULATED!\n");
+    LOG_EMULATED();
     assert(hwnd == (void *)12346);
     return 1;
 }
 
 static __attribute__((stdcall)) uint32_t USER32_ShowWindow(void *hwnd, uint32_t cmdshow)
 {
-    printf("[!] USER32_ShowWindow EMULATED!\n");
+    LOG_EMULATED();
 
     assert(hwnd == (void *)12346);
     assert(cmdshow == 1);
@@ -519,7 +525,7 @@ static __attribute__((stdcall)) uint32_t USER32_ShowWindow(void *hwnd, uint32_t 
 static __attribute__((stdcall)) uint32_t USER32_SystemParametersInfoA(
     uint32_t action, uint32_t wparam, void *pparam, uint32_t winini)
 {
-    printf("[!] USER32_SystemParametersInfoA EMULATED!\n");
+    LOG_EMULATED();
 
     assert(action == 5); // SPI_GETBORDER
     assert(wparam == 0);
@@ -532,7 +538,7 @@ static __attribute__((stdcall)) uint32_t USER32_SystemParametersInfoA(
 
 static __attribute__((stdcall)) uint32_t USER32_GetClientRect(void *hwnd, void *rect)
 {
-    printf("[!] USER32_GetClientRect EMULATED!\n");
+    LOG_EMULATED();
 
     assert(hwnd == (void *)12346);
     assert(rect != NULL);
@@ -542,7 +548,7 @@ static __attribute__((stdcall)) uint32_t USER32_GetClientRect(void *hwnd, void *
 
 static __attribute__((stdcall)) void *USER32_RegisterClassA(const void *wndClass)
 {
-    printf("[!] USER32_RegisterClassA EMULATED!\n");
+    LOG_EMULATED();
 
     assert(wndClass != 0);
 
@@ -551,20 +557,17 @@ static __attribute__((stdcall)) void *USER32_RegisterClassA(const void *wndClass
 
 static __attribute__((stdcall)) void USER32_MessageBoxA()
 {
-    printf("[!] USER32_MessageBoxA STUB!\n");
-    raise(SIGSEGV);
+    STUB();
 }
 
 static __attribute__((stdcall)) void USER32_DispatchMessageA()
 {
-    printf("[!] USER32_DispatchMessageA STUB!\n");
-    raise(SIGSEGV);
+    STUB();
 }
 
 static __attribute__((stdcall)) void USER32_DefWindowProcA()
 {
-    printf("[!] USER32_DefWindowProcA STUB!\n");
-    raise(SIGSEGV);
+    STUB();
 }
 
 static __attribute__((stdcall)) uint32_t USER32_PeekMessageA(
@@ -572,7 +575,7 @@ static __attribute__((stdcall)) uint32_t USER32_PeekMessageA(
       uint32_t UNUSED(msgFilterMin), uint32_t UNUSED(msgFilterMax),
       uint32_t UNUSED(removeMsg))
 {
-    printf("[!] USER32_PeekMessageA EMULATED!\n");
+    LOG_EMULATED();
     // I think that just never returning any message should work,
     // the windowproc does basically nothing I think
     return 0;
@@ -582,7 +585,7 @@ static __attribute__((stdcall)) uint32_t USER32_DialogBoxIndirectParamA(
     void *UNUSED(instance), void *UNUSED(dialogTemplate),
     void *UNUSED(hwndParent), void *UNUSED(dialogFunc), void *UNUSED(initParam))
 {
-    printf("[!] USER32_DialogBoxIndirectParamA EMULATED!\n");
+    LOG_EMULATED();
 
     // Here we don't do the dialog for now, but instead we
     // do some high level emulation of it
@@ -606,20 +609,19 @@ static __attribute__((stdcall)) uint32_t USER32_DialogBoxIndirectParamA(
 
 static __attribute__((stdcall)) void USER32_SendDlgItemMessageA()
 {
-    printf("[!] USER32_SendDlgItemMessageA STUB!\n");
-    raise(SIGSEGV);
+    STUB();
 }
 
 static __attribute__((stdcall)) uint32_t WINMM_timeGetTime()
 {
-    printf("[!] WINMM_timeGetTime EMULATED!\n");
+    LOG_EMULATED();
 
     return (uint32_t)getTimeStampMs();
 }
 
 static __attribute__((stdcall)) uint32_t DDRAW_Surface_Release(void *cominterface)
 {
-    printf("[!] DDRAW_Surface_Release EMULATED!\n");
+    LOG_EMULATED();
 
     assert(cominterface != NULL);
     return 0;
@@ -629,13 +631,13 @@ static __attribute__((stdcall)) void *DDRAW_Surface_Blt(
     void *cominterface, void *UNUSED(rect1), void *UNUSED(surface),
     void *UNUSED(rect2), uint32_t UNUSED(flags), void *UNUSED(bltfx))
 {
-    printf("[!] DDRAW_Surface_Blt EMULATED!\n");
+    LOG_EMULATED();
     assert(cominterface != NULL);
     return 0;
 }
 static __attribute__((stdcall)) void *DDRAW_Surface_GetSurfaceDesc(void *cominterface, void *surface_desc)
 {
-    printf("[!] DDRAW_Surface_GetSurfaceDesc EMULATED!\n");
+    LOG_EMULATED();
 
     assert(cominterface != NULL);
     assert(surface_desc != NULL);
@@ -653,7 +655,7 @@ static __attribute__((stdcall)) void *DDRAW_Surface_GetSurfaceDesc(void *cominte
 }
 static __attribute__((stdcall)) void *DDRAW_Surface_IsLost(void *cominterface)
 {
-    printf("[!] DDRAW_Surface_IsLost EMULATED!\n");
+    LOG_EMULATED();
 
     assert(cominterface != NULL);
 
@@ -662,7 +664,7 @@ static __attribute__((stdcall)) void *DDRAW_Surface_IsLost(void *cominterface)
 
 static __attribute__((stdcall)) void *DDRAW_Surface_Lock(void *cominterface, void *rect, void *surface_desc, uint32_t flags, void *event)
 {
-    printf("[!] DDRAW_Surface_Lock EMULATED!\n");
+    LOG_EMULATED();
 
     assert(cominterface != NULL);
     assert(rect == NULL);
@@ -679,12 +681,11 @@ static __attribute__((stdcall)) void *DDRAW_Surface_Lock(void *cominterface, voi
 }
 static __attribute__((stdcall)) void DDRAW_Surface_Restore()
 {
-    printf("[!] DDRAW_Surface_Restore STUB!\n");
-    raise(SIGSEGV);
+    STUB();
 }
 static __attribute__((stdcall)) void *DDRAW_Surface_SetClipper(void *cominterface, void *clipper)
 {
-    printf("[!] DDRAW_Surface_SetClipper EMULATED!\n");
+    LOG_EMULATED();
 
     assert(cominterface != NULL);
     assert(clipper != NULL);
@@ -694,12 +695,12 @@ static __attribute__((stdcall)) void *DDRAW_Surface_SetClipper(void *cominterfac
 
 static __attribute__((stdcall)) void *DDRAW_Surface_Unlock(void *cominterface, void *rect)
 {
-    printf("[!] DDRAW_Surface_Unlock EMULATED!\n");
+    LOG_EMULATED();
 
     assert(cominterface != NULL);
     assert(rect != NULL);
 
-    printf("--> Dumping frame\n");
+    //printf("--> Dumping frame\n");
     char bmp_name[100];
     sprintf(bmp_name, "/tmp/h7screen_%06u.bmp", frame_counter);
     assert(write_bmp(RESOLUTION_DATA[SETTING_RESOLUTION].width, RESOLUTION_DATA[SETTING_RESOLUTION].height, surfaceptr, bmp_name) == true);
@@ -727,14 +728,14 @@ static struct DDRAW_Surface_Object
 
 static __attribute__((stdcall)) uint32_t DDRAW_Clipper_Release(void *cominterface)
 {
-    printf("[!] DDRAW_Clipper_Release EMULATED!\n");
+    LOG_EMULATED();
 
     assert(cominterface != NULL);
     return 0;
 }
 static __attribute__((stdcall)) void *DDRAW_Clipper_SetHWnd(void *cominterface, uint32_t flags, void *hwnd)
 {
-    printf("[!] DDRAW_Clipper_SetHWnd EMULATED!\n");
+    LOG_EMULATED();
 
     assert(cominterface != NULL);
     assert(flags == 0);
@@ -755,7 +756,7 @@ static struct DDRAW_Clipper_Object
 
 static __attribute__((stdcall)) uint32_t DDRAW_Release(void *cominterface)
 {
-    printf("[!] DDRAW_Release EMULATED!\n");
+    LOG_EMULATED();
 
     assert(cominterface != NULL);
     return 0;
@@ -763,7 +764,7 @@ static __attribute__((stdcall)) uint32_t DDRAW_Release(void *cominterface)
 
 static __attribute__((stdcall)) void *DDRAW_CreateClipper(void *cominterface, uint32_t flags, void **clipper, void *outer)
 {
-    printf("[!] DDRAW_CreateClipper EMULATED!\n");
+    LOG_EMULATED();
 
     assert(cominterface != NULL);
     assert(flags == 0);
@@ -787,7 +788,7 @@ static __attribute__((stdcall)) void *DDRAW_CreateSurface(
 }
 static __attribute__((stdcall)) void *DDRAW_RestoreDisplayMode(void *cominterface)
 {
-    printf("[!] DDRAW_RestoreDisplayMode EMULATED!\n");
+    LOG_EMULATED();
 
     assert(cominterface != NULL);
 
@@ -797,7 +798,7 @@ static __attribute__((stdcall)) void *DDRAW_RestoreDisplayMode(void *cominterfac
 static __attribute__((stdcall)) void *DDRAW_SetCooperativeLevel(
     void *cominterface, void *hwnd, uint32_t UNUSED(flags))
 {
-    printf("[!] DDRAW_SetCooperativeLevel EMULATED!\n");
+    LOG_EMULATED();
 
     assert(cominterface != NULL);
     assert(hwnd == (void *)12346);
@@ -808,7 +809,7 @@ static __attribute__((stdcall)) void *DDRAW_SetCooperativeLevel(
 static __attribute__((stdcall)) void *DDRAW_SetDisplayMode(void *cominterface,
     uint32_t UNUSED(width), uint32_t UNUSED(height), uint32_t bpp)
 {
-    printf("[!] DDRAW_SetDisplayMode EMULATED!\n");
+    LOG_EMULATED();
     assert(cominterface != NULL);
     assert(bpp == 32);
     return 0;
@@ -831,7 +832,7 @@ static struct DDRAW_Object
 static __attribute__((stdcall)) void *DDRAW_DirectDrawCreate(
     void *guid, void **lpdd, void *unkouter)
 {
-    printf("[!] DDRAW_DirectDrawCreate EMULATED!\n");
+    LOG_EMULATED();
 
     assert(guid == NULL);
     assert(lpdd != NULL);
