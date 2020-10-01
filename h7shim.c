@@ -131,6 +131,10 @@ static uint64_t getTimeStampMs()
     return (tv.tv_sec * 1000 + tv.tv_usec / 1000) * 40;
 }
 
+// ------
+// DSOUND
+// ------
+
 static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_GetStatus(void *cominterface, uint32_t *status)
 {
     LOG_EMULATED();
@@ -323,98 +327,11 @@ static __attribute__((stdcall)) void *DSOUND_DirectSoundCreate(
     return 0;
 }
 
-static __attribute__((stdcall)) char *KERNEL32_GetCommandLineA()
-{
-    LOG_EMULATED();
+// --------
+// KERNEL32
+// --------
 
-    static char *COMMANDLINE = "C:\\HEAVEN7W.EXE";
-    return COMMANDLINE;
-}
-
-static __attribute__((stdcall)) void *KERNEL32_GlobalFree(void *ptr)
-{
-    LOG_EMULATED();
-    free(ptr);
-    return NULL;
-}
-
-static __attribute__((stdcall)) void *KERNEL32_CreateThread(
-      void *UNUSED(lpThreadAttributes), uint32_t UNUSED(dwStackSize), void *lpStartAddress,
-      void *lpParameter, uint32_t UNUSED(dwCreationFlags), uint32_t *UNUSED(lpThreadId)
-)
-{
-    LOG_EMULATED();
-
-    pthread_t *thread = malloc(sizeof(pthread_t));
-    pthread_create(thread, NULL, lpStartAddress, lpParameter);
-    //printf("thread is: %p\n", thread);
-    return thread;
-}
-
-static __attribute__((stdcall)) void *KERNEL32_GetModuleHandleA(char *moduleName)
-{
-    LOG_EMULATED();
-
-    assert(moduleName == NULL);
-    return (void *)IMAGEBASE;
-}
-
-static __attribute__((stdcall)) void KERNEL32_LeaveCriticalSection(void *pcs)
-{
-    LOG_EMULATED();
-
-    pthread_mutex_t *mutex = *((pthread_mutex_t **)pcs);
-    pthread_mutex_unlock(mutex);
-}
-
-static __attribute__((stdcall)) void KERNEL32_ExitProcess(uint32_t exitcode)
-{
-    LOG_EMULATED();
-    exit((int)exitcode);
-}
-
-static __attribute__((stdcall)) void KERNEL32_InitializeCriticalSection(void *pcs)
-{
-    LOG_EMULATED();
-
-    pthread_mutex_t *mutex = malloc(sizeof(pthread_mutex_t));
-    pthread_mutex_init(mutex, NULL);
-    *((pthread_mutex_t **)pcs) = mutex;
-}
-
-static __attribute__((stdcall)) uint32_t KERNEL32_SetThreadPriority(void *UNUSED(thread), int UNUSED(priority))
-{
-    LOG_EMULATED();
-
-    return 1;
-}
-
-static __attribute__((stdcall)) void KERNEL32_EnterCriticalSection(void *pcs)
-{
-    LOG_EMULATED();
-
-    pthread_mutex_t *mutex = *((pthread_mutex_t **)pcs);
-    pthread_mutex_lock(mutex);
-}
-
-static __attribute__((stdcall)) uint32_t KERNEL32_CloseHandle(void *object)
-{
-    LOG_EMULATED();
-
-    pthread_t *thread = (pthread_t *)object;
-    free(thread);
-
-    return 1;
-}
-
-static __attribute__((stdcall)) void KERNEL32_DeleteCriticalSection(void *pcs)
-{
-    LOG_EMULATED();
-    
-    pthread_mutex_t *mutex = *((pthread_mutex_t **)pcs);
-    pthread_mutex_destroy(mutex);
-    free(mutex);
-}
+// **MEMORY**
 
 static __attribute__((stdcall)) void *KERNEL32_GlobalAlloc(uint32_t flags, uint32_t memsize)
 {
@@ -433,14 +350,33 @@ static __attribute__((stdcall)) void *KERNEL32_GlobalAlloc(uint32_t flags, uint3
     return alloc_addr;
 }
 
-static __attribute__((stdcall)) void KERNEL32_Sleep(uint32_t timems)
+static __attribute__((stdcall)) void *KERNEL32_GlobalFree(void *ptr)
+{
+    LOG_EMULATED();
+    free(ptr);
+    return NULL;
+}
+
+// **THREADING**
+
+static __attribute__((stdcall)) void *KERNEL32_CreateThread(
+      void *UNUSED(lpThreadAttributes), uint32_t UNUSED(dwStackSize), void *lpStartAddress,
+      void *lpParameter, uint32_t UNUSED(dwCreationFlags), uint32_t *UNUSED(lpThreadId)
+)
 {
     LOG_EMULATED();
 
-    struct timespec ts;
-    ts.tv_sec = timems / 1000;
-    ts.tv_nsec = (timems % 1000) * 1000000;
-    nanosleep(&ts, NULL);
+    pthread_t *thread = malloc(sizeof(pthread_t));
+    pthread_create(thread, NULL, lpStartAddress, lpParameter);
+    //printf("thread is: %p\n", thread);
+    return thread;
+}
+
+static __attribute__((stdcall)) uint32_t KERNEL32_SetThreadPriority(void *UNUSED(thread), int UNUSED(priority))
+{
+    LOG_EMULATED();
+
+    return 1;
 }
 
 static __attribute__((stdcall)) uint32_t KERNEL32_TerminateThread(void *thread, uint32_t UNUSED(exitCode))
@@ -453,98 +389,93 @@ static __attribute__((stdcall)) uint32_t KERNEL32_TerminateThread(void *thread, 
     return 1;
 }
 
-static __attribute__((stdcall)) void *USER32_CreateWindowExA(
-    uint32_t UNUSED(exStyle), const char *UNUSED(className), const char *UNUSED(windowName), uint32_t UNUSED(style),
-    int UNUSED(x), int UNUSED(y), int UNUSED(width), int UNUSED(height),
-    void *UNUSED(hwndParent), void *UNUSED(menu), void *UNUSED(instance), void *UNUSED(pparam))
+static __attribute__((stdcall)) uint32_t KERNEL32_CloseHandle(void *object)
 {
     LOG_EMULATED();
 
-    return (void *)12346;
-}
-
-static __attribute__((stdcall)) void USER32_EndDialog()
-{
-    STUB();
-}
-
-static __attribute__((stdcall)) uint32_t USER32_OffsetRect(void *rect, int UNUSED(dx), int UNUSED(dy))
-{
-    printf("[!] %s EMULATED\n", __func__);
-
-    assert(rect != NULL);
-    return 1;
-}
-
-static __attribute__((stdcall)) uint32_t USER32_ClientToScreen(void *hwnd, void *point)
-{
-    LOG_EMULATED();
-
-    assert(hwnd == (void *)12346);
-    assert(point != NULL);
+    pthread_t *thread = (pthread_t *)object;
+    free(thread);
 
     return 1;
 }
 
-static __attribute__((stdcall)) int USER32_GetSystemMetrics(int index)
+// **CRITICAL SECTION**
+
+static __attribute__((stdcall)) void KERNEL32_InitializeCriticalSection(void *pcs)
 {
     LOG_EMULATED();
 
-    if (index == 0) // SM_CXSCREEN
-        return 1920;
-    else if (index == 1) // SM_CYSCREEN
-        return 1080;
-    else if (index == 4) // SM_CYSCAPTION
-        return 19;
-    else
-        assert(0);
+    pthread_mutex_t *mutex = malloc(sizeof(pthread_mutex_t));
+    pthread_mutex_init(mutex, NULL);
+    *((pthread_mutex_t **)pcs) = mutex;
 }
 
-static __attribute__((stdcall)) void *USER32_SetCursor(void *UNUSED(cursor))
-{
-    LOG_EMULATED();
-    return NULL;
-}
-
-static __attribute__((stdcall)) uint32_t USER32_DestroyWindow(void *hwnd)
-{
-    LOG_EMULATED();
-    assert(hwnd == (void *)12346);
-    return 1;
-}
-
-static __attribute__((stdcall)) uint32_t USER32_ShowWindow(void *hwnd, uint32_t cmdshow)
+static __attribute__((stdcall)) void KERNEL32_EnterCriticalSection(void *pcs)
 {
     LOG_EMULATED();
 
-    assert(hwnd == (void *)12346);
-    assert(cmdshow == 1);
-    return 0;
+    pthread_mutex_t *mutex = *((pthread_mutex_t **)pcs);
+    pthread_mutex_lock(mutex);
 }
 
-static __attribute__((stdcall)) uint32_t USER32_SystemParametersInfoA(
-    uint32_t action, uint32_t wparam, void *pparam, uint32_t winini)
+static __attribute__((stdcall)) void KERNEL32_LeaveCriticalSection(void *pcs)
 {
     LOG_EMULATED();
 
-    assert(action == 5); // SPI_GETBORDER
-    assert(wparam == 0);
-    assert(pparam != 0);
-    assert(winini == 0);
-
-    *(uint32_t *)pparam = 1;
-    return 1;
+    pthread_mutex_t *mutex = *((pthread_mutex_t **)pcs);
+    pthread_mutex_unlock(mutex);
 }
 
-static __attribute__((stdcall)) uint32_t USER32_GetClientRect(void *hwnd, void *rect)
+static __attribute__((stdcall)) void KERNEL32_DeleteCriticalSection(void *pcs)
+{
+    LOG_EMULATED();
+    
+    pthread_mutex_t *mutex = *((pthread_mutex_t **)pcs);
+    pthread_mutex_destroy(mutex);
+    free(mutex);
+}
+
+// **MISC**
+
+static __attribute__((stdcall)) char *KERNEL32_GetCommandLineA()
 {
     LOG_EMULATED();
 
-    assert(hwnd == (void *)12346);
-    assert(rect != NULL);
-
-    return 1;
+    static char *COMMANDLINE = "C:\\HEAVEN7W.EXE";
+    return COMMANDLINE;
 }
+
+
+static __attribute__((stdcall)) void *KERNEL32_GetModuleHandleA(char *moduleName)
+{
+    LOG_EMULATED();
+
+    assert(moduleName == NULL);
+    return (void *)IMAGEBASE;
+}
+
+
+static __attribute__((stdcall)) void KERNEL32_ExitProcess(uint32_t exitcode)
+{
+    LOG_EMULATED();
+    exit((int)exitcode);
+}
+
+static __attribute__((stdcall)) void KERNEL32_Sleep(uint32_t timems)
+{
+    LOG_EMULATED();
+
+    struct timespec ts;
+    ts.tv_sec = timems / 1000;
+    ts.tv_nsec = (timems % 1000) * 1000000;
+    nanosleep(&ts, NULL);
+}
+
+// ------
+// USER32
+// ------
+
+// **WINDOW**
 
 static __attribute__((stdcall)) void *USER32_RegisterClassA(const void *wndClass)
 {
@@ -555,9 +486,23 @@ static __attribute__((stdcall)) void *USER32_RegisterClassA(const void *wndClass
     return (void *)12345;
 }
 
-static __attribute__((stdcall)) void USER32_MessageBoxA()
+static __attribute__((stdcall)) void *USER32_CreateWindowExA(
+    uint32_t UNUSED(exStyle), const char *UNUSED(className), const char *UNUSED(windowName), uint32_t UNUSED(style),
+    int UNUSED(x), int UNUSED(y), int UNUSED(width), int UNUSED(height),
+    void *UNUSED(hwndParent), void *UNUSED(menu), void *UNUSED(instance), void *UNUSED(pparam))
 {
-    STUB();
+    LOG_EMULATED();
+
+    return (void *)12346;
+}
+
+static __attribute__((stdcall)) uint32_t USER32_ShowWindow(void *hwnd, uint32_t cmdshow)
+{
+    LOG_EMULATED();
+
+    assert(hwnd == (void *)12346);
+    assert(cmdshow == 1);
+    return 0;
 }
 
 static __attribute__((stdcall)) void USER32_DispatchMessageA()
@@ -580,6 +525,35 @@ static __attribute__((stdcall)) uint32_t USER32_PeekMessageA(
     // the windowproc does basically nothing I think
     return 0;
 }
+
+static __attribute__((stdcall)) uint32_t USER32_DestroyWindow(void *hwnd)
+{
+    LOG_EMULATED();
+    assert(hwnd == (void *)12346);
+    return 1;
+}
+
+static __attribute__((stdcall)) uint32_t USER32_ClientToScreen(void *hwnd, void *point)
+{
+    LOG_EMULATED();
+
+    assert(hwnd == (void *)12346);
+    assert(point != NULL);
+
+    return 1;
+}
+
+static __attribute__((stdcall)) uint32_t USER32_GetClientRect(void *hwnd, void *rect)
+{
+    LOG_EMULATED();
+
+    assert(hwnd == (void *)12346);
+    assert(rect != NULL);
+
+    return 1;
+}
+
+// **DIALOG**
 
 static __attribute__((stdcall)) uint32_t USER32_DialogBoxIndirectParamA(
     void *UNUSED(instance), void *UNUSED(dialogTemplate),
@@ -612,12 +586,75 @@ static __attribute__((stdcall)) void USER32_SendDlgItemMessageA()
     STUB();
 }
 
+static __attribute__((stdcall)) void USER32_EndDialog()
+{
+    STUB();
+}
+
+// **MISC**
+
+static __attribute__((stdcall)) void USER32_MessageBoxA()
+{
+    STUB();
+}
+
+static __attribute__((stdcall)) uint32_t USER32_OffsetRect(void *rect, int UNUSED(dx), int UNUSED(dy))
+{
+    printf("[!] %s EMULATED\n", __func__);
+
+    assert(rect != NULL);
+    return 1;
+}
+
+static __attribute__((stdcall)) int USER32_GetSystemMetrics(int index)
+{
+    LOG_EMULATED();
+
+    if (index == 0) // SM_CXSCREEN
+        return 1920;
+    else if (index == 1) // SM_CYSCREEN
+        return 1080;
+    else if (index == 4) // SM_CYSCAPTION
+        return 19;
+    else
+        assert(0);
+}
+
+static __attribute__((stdcall)) uint32_t USER32_SystemParametersInfoA(
+    uint32_t action, uint32_t wparam, void *pparam, uint32_t winini)
+{
+    LOG_EMULATED();
+
+    assert(action == 5); // SPI_GETBORDER
+    assert(wparam == 0);
+    assert(pparam != 0);
+    assert(winini == 0);
+
+    *(uint32_t *)pparam = 1;
+    return 1;
+}
+
+static __attribute__((stdcall)) void *USER32_SetCursor(void *UNUSED(cursor))
+{
+    LOG_EMULATED();
+    return NULL;
+}
+
+
+// -----
+// WINMM
+// -----
+
 static __attribute__((stdcall)) uint32_t WINMM_timeGetTime()
 {
     LOG_EMULATED();
 
     return (uint32_t)getTimeStampMs();
 }
+
+// -----
+// DDRAW
+// -----
 
 static __attribute__((stdcall)) uint32_t DDRAW_Surface_Release(void *cominterface)
 {
