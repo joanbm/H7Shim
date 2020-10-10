@@ -25,6 +25,8 @@ struct Resolution {
 
 #define SETTING_RESOLUTION 3 // See above
 #define SETTING_TRACER 0 // 0 = 1x1, 1 = 2x2, 2 = 4x4
+#define SETTING_NOSOUND 0
+#define SETTING_SOUND44KHZ 0
 #define SETTING_FULLSCREEN 1 // 0 or 1
 #define SETTING_NOTEXT 0 // 0 or 1
 #define SETTING_LOOP 0 // 0 or 1
@@ -573,7 +575,7 @@ static __attribute__((stdcall)) uint32_t USER32_DialogBoxIndirectParamA(
     // ControlId 0x3EF = Looping checkbox, bool goes to EBP+0x1C
     *(uint32_t *)(memcontrolblock+0x10) = SETTING_RESOLUTION;
     *(uint32_t *)(memcontrolblock+0x58) = SETTING_TRACER;
-    *(uint32_t *)(memcontrolblock+0x14) = 0; // No sound
+    *(uint32_t *)(memcontrolblock+0x14) = SETTING_NOSOUND | (SETTING_SOUND44KHZ << 8);
     *(uint32_t *)(memcontrolblock+0x150) = SETTING_FULLSCREEN;
     *(uint32_t *)(memcontrolblock+0x18) = SETTING_NOTEXT;
     *(uint32_t *)(memcontrolblock+0x1C) = SETTING_LOOP;
