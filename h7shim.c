@@ -8,6 +8,7 @@
 #include <sys/time.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <SDL2/SDL.h>
 
 #define IMAGEBASE 0x400000
 #define IMAGESIZE 0x2B000
@@ -32,6 +33,7 @@ struct Resolution {
 #define SETTING_LOOP 0 // 0 or 1
 
 static bool dump_frames = false;
+static bool dump_audio = true;
 #define SPEEDUP_FACTOR 1
 
 #ifdef __GNUC__
@@ -51,9 +53,6 @@ static bool dump_frames = false;
 static uint8_t *memcontrolblock = NULL;
 static uint32_t surfaceptr[0x1000000/4];
 static uint32_t frame_counter = 0;
-static uint32_t audio_counter = 0;
-
-static uint16_t samplebfr[8*44100];
 
 // Writes a little-endian 16-bit unsigned integer to the given file
 static void fputleu16(FILE *f, uint16_t value)
@@ -140,6 +139,19 @@ static uint64_t getTimeStampMs()
 // DSOUND
 // ------
 
+typedef struct DSound_SoundBufferImpl_Object
+{
+    void *vtable;
+
+    bool is_primary;
+    uint8_t *audio_buffer;
+    uint32_t audio_buffer_size;
+    bool audio_playing;
+    uint32_t audio_playpos;
+
+    FILE *dumpfile;
+} DSound_SoundBufferImpl_Object;
+
 static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_GetStatus(void *cominterface, uint32_t *status)
 {
     LOG_EMULATED();
@@ -158,38 +170,45 @@ static __attribute__((stdcall)) void DSOUND_SoundBufferImpl_Restore()
 
 static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_Lock(
     void *cominterface,
-    uint32_t UNUSED(dwOffset), uint32_t dwBytes,
+    uint32_t dwOffset, uint32_t dwBytes,
     void **ppvAudioPtr1, uint32_t *pdwAudioBytes1,
     void **UNUSED(ppvAudioPtr2), uint32_t *UNUSED(pdwAudioBytes2),
     uint32_t UNUSED(dwFlags))
 {
     LOG_EMULATED();
 
+    assert(cominterface != NULL);
 
-    //printf("--> AUDIO OFFSET %u BYTES %u\n", dwOffset, dwBytes);
+    SDL_LockAudio();
 
-    *ppvAudioPtr1 = samplebfr;
+    DSound_SoundBufferImpl_Object *bufferobj = (DSound_SoundBufferImpl_Object *)cominterface;
+    assert(!bufferobj->is_primary);
+    assert(dwOffset <= bufferobj->audio_buffer_size);
+    assert(dwBytes <= bufferobj->audio_buffer_size);
+    assert(dwOffset + dwBytes <= bufferobj->audio_buffer_size);
+    if (bufferobj->audio_playing) {
+        assert(dwOffset > bufferobj->audio_playpos ||
+               (dwOffset + dwBytes <= bufferobj->audio_playpos));
+    }
+
+    *ppvAudioPtr1 = &bufferobj->audio_buffer[dwOffset];
     *pdwAudioBytes1 = dwBytes;
 
-    assert(cominterface != NULL);
     return NULL;
 }
 
 static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_Unlock(
-    void *cominterface, void *UNUSED(pvAudioPtr1), uint32_t dwAudioBytes1,
+    void *cominterface, void *pvAudioPtr1, uint32_t dwAudioBytes1,
     void *UNUSED(pvAudioPtr2), uint32_t UNUSED(dwAudioBytes2))
 {
     LOG_EMULATED();
     assert(cominterface != NULL);
+    SDL_UnlockAudio();
+    DSound_SoundBufferImpl_Object *bufferobj = (DSound_SoundBufferImpl_Object *)cominterface;
 
-    //printf("--> AUDIO UNLOCK %u BYTES\n", dwAudioBytes1);
-
-    char audio_name[100];
-    sprintf(audio_name, "/tmp/h7audio_%06u.raw", audio_counter);
-    FILE *sbfr = fopen(audio_name, "wb");
-    fwrite(samplebfr, 1, dwAudioBytes1, sbfr);
-    fclose(sbfr);
-    audio_counter++;
+    if (bufferobj->dumpfile) {
+        assert(fwrite(pvAudioPtr1, 1, dwAudioBytes1, bufferobj->dumpfile) == dwAudioBytes1);
+    }
 
     return NULL;
 }
@@ -213,6 +232,12 @@ static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_Play(
     LOG_EMULATED();
     assert(cominterface != NULL);
 
+    DSound_SoundBufferImpl_Object *bufferobj = (DSound_SoundBufferImpl_Object *)cominterface;
+    assert(!bufferobj->is_primary);
+    bufferobj->audio_playing = true;
+    bufferobj->audio_playpos = 0;
+    SDL_PauseAudio(0);
+
     return 0;
 }
 
@@ -225,19 +250,10 @@ static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_GetCurrentPosition(
     assert(pdwCurrentPlayCursor != NULL);
     assert(pdwCurrentWriteCursor != NULL);
 
-    static uint64_t initTimeStampMs = (uint64_t)-1;
-    if (initTimeStampMs == (uint64_t)-1)
-        initTimeStampMs = getTimeStampMs();
-    uint64_t currentTimeStampMs = getTimeStampMs();
-
-    uint64_t elapsedMs = currentTimeStampMs - initTimeStampMs;
-    uint32_t playedSamples = (uint32_t)(44100 * elapsedMs/1000.0);
-
-    uint32_t bufferSizeSamples = 44100*8;
-
-    *pdwCurrentPlayCursor = (playedSamples % bufferSizeSamples) * 2;
+    DSound_SoundBufferImpl_Object *bufferobj = (DSound_SoundBufferImpl_Object *)cominterface;
+    assert(!bufferobj->is_primary);
+    *pdwCurrentPlayCursor = bufferobj->audio_playpos;
     *pdwCurrentWriteCursor = *pdwCurrentPlayCursor; // Don't matter
-    //printf("--> SET AUDIO TO %u\n", *pdwCurrentPlayCursor);
 
     return 0;
 }
@@ -247,6 +263,13 @@ static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_Stop(void *cominter
     LOG_EMULATED();
 
     assert(cominterface != NULL);
+
+    DSound_SoundBufferImpl_Object *bufferobj = (DSound_SoundBufferImpl_Object *)cominterface;
+    assert(!bufferobj->is_primary);
+    bufferobj->audio_playing = false;
+    bufferobj->audio_playpos = 0;
+    SDL_PauseAudio(0);
+
     return 0;
 }
 
@@ -255,6 +278,16 @@ static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_Release(void *comin
     LOG_EMULATED();
 
     assert(cominterface != NULL);
+    DSound_SoundBufferImpl_Object *bufferobj = (DSound_SoundBufferImpl_Object *)cominterface;
+    if (!bufferobj->is_primary) {
+        SDL_CloseAudio();
+
+        if (bufferobj->dumpfile)
+            fclose(bufferobj->dumpfile);
+    }
+    free(bufferobj->audio_buffer);
+    free(bufferobj);
+
     return 0;
 }
 
@@ -270,10 +303,29 @@ static void *DSound_SoundBufferImpl_VTABLE[256] = {
     [0x8/4] = DSOUND_SoundBufferImpl_Release,
 };
 
-static struct DSound_SoundBufferImpl_Object
+static void AudioCallback(void *userdata, Uint8 *stream, int len)
 {
-    void *vtable;
-} DSound_SoundBufferImpl_NULLOBJECT = { DSound_SoundBufferImpl_VTABLE };
+    DSound_SoundBufferImpl_Object *bufferobj = (DSound_SoundBufferImpl_Object *)userdata;
+
+    uint32_t stream_pos = 0, stream_len = (uint32_t)len;
+    assert(stream_len < bufferobj->audio_buffer_size);
+
+    if (bufferobj->audio_playing) {
+        for (size_t i = 0; i < 2; i++) { // Drain twice to handle circular buffer wraparound
+            uint32_t buffer_avail = bufferobj->audio_buffer_size - bufferobj->audio_playpos;
+            uint32_t take = stream_len < buffer_avail ? stream_len : buffer_avail;
+
+            memcpy(stream + stream_pos, bufferobj->audio_buffer + bufferobj->audio_playpos, take);
+            bufferobj->audio_playpos += take;
+            if (bufferobj->audio_playpos == bufferobj->audio_buffer_size)
+                bufferobj->audio_playpos = 0;
+            stream_pos += take;
+            stream_len -= take;
+        }
+    }
+
+    memset(stream + stream_pos, 0, stream_len);
+}
 
 static __attribute__((stdcall)) void *DSOUND_CreateSoundBuffer(
     void *cominterface, void *buffer_desc, void **ppdsb, void *unk)
@@ -285,7 +337,45 @@ static __attribute__((stdcall)) void *DSOUND_CreateSoundBuffer(
     assert(ppdsb != NULL);
     assert(unk == NULL);
 
-    *ppdsb = &DSound_SoundBufferImpl_NULLOBJECT;
+    bool is_primary_buffer = *(uint32_t *)((uint8_t *)buffer_desc + 4) & 1;
+    uint32_t buffer_size = *(uint32_t *)((uint8_t *)buffer_desc + 8);
+    void *waveformatex = *(void **)((uint8_t *)buffer_desc + 16);
+    uint32_t freq = waveformatex != NULL ? *(uint32_t *)((uint8_t *)waveformatex + 4) : 0;
+
+    DSound_SoundBufferImpl_Object *bufferobj = malloc(sizeof(DSound_SoundBufferImpl_Object));
+    bufferobj->vtable = DSound_SoundBufferImpl_VTABLE;
+    bufferobj->is_primary = is_primary_buffer;
+    bufferobj->audio_buffer = !is_primary_buffer ? malloc(buffer_size) : NULL;
+    bufferobj->audio_buffer_size = !is_primary_buffer ? buffer_size : 0;
+    bufferobj->audio_playing = false;
+    bufferobj->audio_playpos = 0;
+    bufferobj->dumpfile = NULL;
+
+    if (!bufferobj->is_primary) {
+        SDL_AudioSpec wav_spec;
+        SDL_memset(&wav_spec, 0, sizeof(wav_spec));
+        wav_spec.freq = freq * SPEEDUP_FACTOR;
+        wav_spec.format = AUDIO_S16;
+        wav_spec.channels = 2;
+        wav_spec.samples = 4096;
+        wav_spec.callback = AudioCallback;
+        wav_spec.userdata = bufferobj;
+
+        if (SDL_OpenAudio(&wav_spec, NULL) < 0) {
+            fprintf(stderr, "Couldn't open SDL audio: %s\n", SDL_GetError());
+            exit(EXIT_FAILURE);
+        }
+
+        if (dump_audio) {
+            bufferobj->dumpfile = fopen("/tmp/h7audio.raw", "wb");
+            if (bufferobj->dumpfile == NULL) {
+                fprintf(stderr, "WARNING: Couldn't open audio dump file\n");
+                exit(EXIT_FAILURE);
+            }
+        }
+    }
+
+    *ppdsb = bufferobj;
     return 0;
 }
 
@@ -887,6 +977,9 @@ static __attribute__((stdcall)) void *DDRAW_DirectDrawCreate(
 typedef void (*entrypoint_t)();
 
 int main(void) {
+    if (SDL_Init(SDL_INIT_AUDIO) < 0)
+            return EXIT_FAILURE;
+
     assert(mmap((void *)IMAGEBASE, IMAGESIZE, PROT_READ | PROT_WRITE,
                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) == (void *)IMAGEBASE);
     char *image = (char *)IMAGEBASE;
