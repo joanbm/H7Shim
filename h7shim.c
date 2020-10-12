@@ -31,6 +31,9 @@ struct Resolution {
 #define SETTING_NOTEXT 0 // 0 or 1
 #define SETTING_LOOP 0 // 0 or 1
 
+static bool dump_frames = false;
+#define SPEEDUP_FACTOR 1
+
 #ifdef __GNUC__
 #define UNUSED(x) UNUSED_ ## x __attribute__((__unused__))
 #else
@@ -130,7 +133,7 @@ static uint64_t getTimeStampMs()
 {
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    return (tv.tv_sec * 1000 + tv.tv_usec / 1000) * 40;
+    return (tv.tv_sec * 1000 + tv.tv_usec / 1000) * SPEEDUP_FACTOR;
 }
 
 // ------
@@ -370,7 +373,6 @@ static __attribute__((stdcall)) void *KERNEL32_CreateThread(
 
     pthread_t *thread = malloc(sizeof(pthread_t));
     pthread_create(thread, NULL, lpStartAddress, lpParameter);
-    //printf("thread is: %p\n", thread);
     return thread;
 }
 
@@ -431,7 +433,7 @@ static __attribute__((stdcall)) void KERNEL32_LeaveCriticalSection(void *pcs)
 static __attribute__((stdcall)) void KERNEL32_DeleteCriticalSection(void *pcs)
 {
     LOG_EMULATED();
-    
+
     pthread_mutex_t *mutex = *((pthread_mutex_t **)pcs);
     pthread_mutex_destroy(mutex);
     free(mutex);
@@ -602,7 +604,7 @@ static __attribute__((stdcall)) void USER32_MessageBoxA()
 
 static __attribute__((stdcall)) uint32_t USER32_OffsetRect(void *rect, int UNUSED(dx), int UNUSED(dy))
 {
-    printf("[!] %s EMULATED\n", __func__);
+    LOG_EMULATED();
 
     assert(rect != NULL);
     return 1;
@@ -739,11 +741,12 @@ static __attribute__((stdcall)) void *DDRAW_Surface_Unlock(void *cominterface, v
     assert(cominterface != NULL);
     assert(rect != NULL);
 
-    //printf("--> Dumping frame\n");
-    char bmp_name[100];
-    sprintf(bmp_name, "/tmp/h7screen_%06u.bmp", frame_counter);
-    assert(write_bmp(RESOLUTION_DATA[SETTING_RESOLUTION].width, RESOLUTION_DATA[SETTING_RESOLUTION].height, surfaceptr, bmp_name) == true);
-    frame_counter++;
+    if (dump_frames) {
+        char bmp_name[100];
+        sprintf(bmp_name, "/tmp/h7screen_%06u.bmp", frame_counter);
+        assert(write_bmp(RESOLUTION_DATA[SETTING_RESOLUTION].width, RESOLUTION_DATA[SETTING_RESOLUTION].height, surfaceptr, bmp_name) == true);
+        frame_counter++;
+    }
 
     return  0;
 }
@@ -932,5 +935,5 @@ int main(void) {
 
     ((entrypoint_t)ENTRYPOINT)();
 
-    return 0;
+    return EXIT_SUCCESS;
 }
