@@ -8,7 +8,7 @@
 #include <sys/time.h>
 #include <pthread.h>
 #include <unistd.h>
-#include <SDL2/SDL.h>
+#include <SDL.h>
 
 #define IMAGEBASE 0x400000
 #define IMAGESIZE 0x2B000
