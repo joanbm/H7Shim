@@ -207,7 +207,10 @@ static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_Unlock(
     DSound_SoundBufferImpl_Object *bufferobj = (DSound_SoundBufferImpl_Object *)cominterface;
 
     if (bufferobj->dumpfile) {
-        assert(fwrite(pvAudioPtr1, 1, dwAudioBytes1, bufferobj->dumpfile) == dwAudioBytes1);
+        if (fwrite(pvAudioPtr1, 1, dwAudioBytes1, bufferobj->dumpfile) != dwAudioBytes1) {
+            fprintf(stderr, "WARNING: Could not write to dump audio file, result may be incomplete.");
+
+        }
     }
 
     return NULL;
@@ -834,7 +837,9 @@ static __attribute__((stdcall)) void *DDRAW_Surface_Unlock(void *cominterface, v
     if (dump_frames) {
         char bmp_name[100];
         sprintf(bmp_name, "/tmp/h7screen_%06u.bmp", frame_counter);
-        assert(write_bmp(RESOLUTION_DATA[SETTING_RESOLUTION].width, RESOLUTION_DATA[SETTING_RESOLUTION].height, surfaceptr, bmp_name) == true);
+        if (!write_bmp(RESOLUTION_DATA[SETTING_RESOLUTION].width, RESOLUTION_DATA[SETTING_RESOLUTION].height, surfaceptr, bmp_name)) {
+            fprintf(stderr, "WARNING: Could not write to dump bitmap file, result may be incomplete.");
+        }
         frame_counter++;
     }
 
@@ -980,14 +985,23 @@ int main(void) {
     if (SDL_Init(SDL_INIT_AUDIO) < 0)
             return EXIT_FAILURE;
 
-    assert(mmap((void *)IMAGEBASE, IMAGESIZE, PROT_READ | PROT_WRITE,
-                MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) == (void *)IMAGEBASE);
-    char *image = (char *)IMAGEBASE;
+    char *image = mmap((void *)IMAGEBASE, IMAGESIZE, PROT_READ | PROT_WRITE,
+                MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+    if (image == MAP_FAILED) {
+        fprintf(stderr, "ERROR: Failed to map HEAVEN7 executable memory.\n");
+        return EXIT_FAILURE;
+    }
 
     FILE *h7exe = fopen("HEAVEN7W_C.EXE", "rb");
-    assert(h7exe != NULL);
-    int r = fread(image, 1, IMAGESIZE, h7exe);
-    assert(r == IMAGESIZE);
+    if (h7exe == NULL) {
+        fprintf(stderr, "ERROR: Failed to open HEAVEN7 executable.\n");
+        return EXIT_FAILURE;
+    }
+    size_t r = fread(image, 1, IMAGESIZE, h7exe);
+    if (r != IMAGESIZE) {
+        fprintf(stderr, "ERROR: Failed to read HEAVEN7 executable image.\n");
+        return EXIT_FAILURE;
+    }
 
     *((void **)(image + 0xF000)) = DDRAW_DirectDrawCreate;
     *((void **)(image + 0xF008)) = DSOUND_DirectSoundCreate;
@@ -1024,7 +1038,9 @@ int main(void) {
     *((void **)(image + 0xF08C)) = USER32_SendDlgItemMessageA;
     *((void **)(image + 0xF094)) = WINMM_timeGetTime;
 
-    assert(mprotect(image, IMAGESIZE, PROT_READ | PROT_WRITE | PROT_EXEC) == 0);
+    if (mprotect(image, IMAGESIZE, PROT_READ | PROT_WRITE | PROT_EXEC) != 0) {
+        fprintf(stderr, "ERROR: Failed to change HEAVEN7 executable memory protection.\n");
+    }
 
     ((entrypoint_t)ENTRYPOINT)();
 
