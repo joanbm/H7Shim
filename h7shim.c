@@ -146,7 +146,7 @@ static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_Unlock(
 
     if (bufferobj->dumpfile) {
         if (fwrite(pvAudioPtr1, 1, dwAudioBytes1, bufferobj->dumpfile) != dwAudioBytes1) {
-            fprintf(stderr, "WARNING: Could not write to dump audio file, result may be incomplete.");
+            fprintf(stderr, "WARNING: Could not write to dump audio file, result may be incomplete.\n");
 
         }
     }
@@ -776,7 +776,7 @@ static __attribute__((stdcall)) void *DDRAW_Surface_Unlock(void *cominterface, v
         char bmp_name[100];
         sprintf(bmp_name, "/tmp/h7screen_%06u.bmp", frame_counter);
         if (!write_bmp(RESOLUTION_DATA[SETTING_RESOLUTION].width, RESOLUTION_DATA[SETTING_RESOLUTION].height, surfaceptr, bmp_name)) {
-            fprintf(stderr, "WARNING: Could not write to dump bitmap file, result may be incomplete.");
+            fprintf(stderr, "WARNING: Could not write to dump bitmap file, result may be incomplete.\n");
         }
         frame_counter++;
     }
