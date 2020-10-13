@@ -53,78 +53,17 @@ static uint8_t *memcontrolblock = NULL;
 static uint32_t surfaceptr[0x1000000/4];
 static uint32_t frame_counter = 0;
 
-// Writes a little-endian 16-bit unsigned integer to the given file
-static void fputleu16(FILE *f, uint16_t value)
-{
-    uint8_t buf[2];
-    buf[0] = (uint8_t)value;
-    buf[1] = (uint8_t)(value >> 8u);
-    fwrite(buf, 1, 2, f);
-}
-
-// Writes a little-endian 32-bit unsigned integer to the given file
-static void fputleu32(FILE *f, uint32_t value)
-{
-    uint8_t buf[4];
-    buf[0] = (uint8_t)value;
-    buf[1] = (uint8_t)(value >> 8u);
-    buf[2] = (uint8_t)(value >> 16u);
-    buf[3] = (uint8_t)(value >> 24u);
-    fwrite(buf, 1, 4, f);
-}
-
 // Creates a BMP file containing a visual representation of the given cellular automaton state
 static bool write_bmp(size_t sizex, size_t sizey, uint32_t *pixbuf, const char *output_file_path)
 {
-    // Calculate bitmap dimensions
-    uint32_t bitmap_header_size = 14;
-    uint32_t dib_header_size = 40;
-    uint32_t palette_size = 8;
-    uint32_t bitmap_offset = bitmap_header_size + dib_header_size + palette_size;
-
-    uint32_t bitmap_size = (uint32_t)(sizex*sizey*4);
-    uint32_t total_size = bitmap_offset + bitmap_size;
-
-    FILE *fp = fopen(output_file_path, "wb");
-    if (fp == NULL) {
-        printf("Could not open the output image file\n");
+    SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormatFrom(
+        pixbuf, sizex, sizey, 32, sizex*4, SDL_PIXELFORMAT_RGB888);
+    if (surface == NULL)
         return false;
-    }
 
-    // Bitmap header
-    fprintf(fp, "BM"); // Magic number
-    fputleu32(fp, total_size);
-    fputleu16(fp, 0); // Reserved
-    fputleu16(fp, 0); // Reserved
-    fputleu32(fp, bitmap_offset);
-
-    // DIB header
-    fputleu32(fp, dib_header_size);
-    fputleu32(fp, sizex);
-    fputleu32(fp, -(uint32_t)sizey); // Negative to avoid upside-down image data
-    fputleu16(fp, 1); // Number of color planes
-    fputleu16(fp, 32); // Bits per pixel
-    fputleu32(fp, 0); // Compression (=None)
-    fputleu32(fp, bitmap_size);
-    fputleu32(fp, 0); // Horizontal resolution (=None)
-    fputleu32(fp, 0); // Vertical resolution (=None)
-    fputleu32(fp, 0); // Number of palette colors (=None)
-    fputleu32(fp, 0); // Important colors (=All)
-
-    // Image data
-    for (size_t i = 0; i < sizex*sizey; i++) {
-        fputleu32(fp, pixbuf[i]);
-    }
-
-    bool ok = ferror(fp) == 0;
-    ok &= fclose(fp) != EOF;
-
-    if (!ok) {
-        printf("Could not write the output image file\n");
-        remove(output_file_path);
-    }
-
-    return ok;
+    bool ret = SDL_SaveBMP(surface, output_file_path) == 0;
+    SDL_FreeSurface(surface);
+    return ret;
 }
 
 static uint64_t getTimeStampMs()
