@@ -7,14 +7,13 @@
 #include <sys/mman.h>
 #include <sys/time.h>
 #include <pthread.h>
-#include <unistd.h>
 #include <SDL.h>
 
 #define IMAGEBASE 0x400000
 #define IMAGESIZE 0x2B000
 #define ENTRYPOINT 0x40168C
 
-struct Resolution {
+static const struct Resolution {
     int width;
     int height;
 } RESOLUTION_DATA[4] = {
@@ -75,7 +74,7 @@ static void fputleu32(FILE *f, uint32_t value)
 }
 
 // Creates a BMP file containing a visual representation of the given cellular automaton state
-static bool write_bmp(size_t sizex, size_t sizey, uint32_t *pixbuf, char *output_file_path)
+static bool write_bmp(size_t sizex, size_t sizey, uint32_t *pixbuf, const char *output_file_path)
 {
     // Calculate bitmap dimensions
     uint32_t bitmap_header_size = 14;
@@ -543,7 +542,7 @@ static __attribute__((stdcall)) char *KERNEL32_GetCommandLineA()
 }
 
 
-static __attribute__((stdcall)) void *KERNEL32_GetModuleHandleA(char *moduleName)
+static __attribute__((stdcall)) void *KERNEL32_GetModuleHandleA(const char *moduleName)
 {
     LOG_EMULATED();
 
