@@ -616,7 +616,7 @@ static __attribute__((stdcall)) void *USER32_RegisterClassA(const void *wndClass
 {
     LOG_EMULATED();
 
-    assert(wndClass != 0);
+    assert(wndClass != NULL);
 
     return (void *)12345;
 }
@@ -762,7 +762,7 @@ static __attribute__((stdcall)) uint32_t USER32_SystemParametersInfoA(
 
     assert(action == 5); // SPI_GETBORDER
     assert(wparam == 0);
-    assert(pparam != 0);
+    assert(pparam != NULL);
     assert(winini == 0);
 
     *(uint32_t *)pparam = 1;
@@ -968,7 +968,7 @@ static __attribute__((stdcall)) void *DDRAW_CreateClipper(void *cominterface, ui
 
     assert(cominterface != NULL);
     assert(flags == 0);
-    assert(clipper != 0);
+    assert(clipper != NULL);
     assert(outer == 0);
 
     *clipper = &DDRAW_Clipper_NULLOBJECT;
