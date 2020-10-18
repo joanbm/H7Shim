@@ -10,8 +10,8 @@
 #include <SDL.h>
 
 #define IMAGEBASE 0x400000
-#define IMAGESIZE 0x2B000
-#define ENTRYPOINT 0x40168C
+#define IMAGESIZE 0x2E000
+#define ENTRYPOINT 0x42C8A0
 
 static const struct Resolution {
     int width;
@@ -52,6 +52,22 @@ static bool dump_audio = true;
 static uint8_t *memcontrolblock = NULL;
 static uint32_t surfaceptr[0x1000000/4];
 static uint32_t frame_counter = 0;
+
+typedef struct SymbolTable
+{
+    const char *symbolName;
+    void *symbol;
+} SymbolTable;
+
+typedef struct LibraryTable
+{
+    const char *libraryName;
+    SymbolTable *symbolTable;
+} LibraryTable;
+
+#define MAKE_SYMBOL_ORDINAL(ord) ((char *)(uint32_t)(ord))
+
+static LibraryTable *GLOBAL_LIBRARY_TABLE;
 
 // Creates a BMP file containing a visual representation of the given cellular automaton state
 static bool write_bmp(size_t sizex, size_t sizey, uint32_t *pixbuf, const char *output_file_path)
@@ -363,6 +379,11 @@ static __attribute__((stdcall)) void *DSOUND_DirectSoundCreate(
     return 0;
 }
 
+static SymbolTable DSOUND_SYMBOLS[] = {
+    { MAKE_SYMBOL_ORDINAL(0x0001), DSOUND_DirectSoundCreate },
+    { NULL, NULL }
+};
+
 // --------
 // KERNEL32
 // --------
@@ -505,6 +526,85 @@ static __attribute__((stdcall)) void KERNEL32_Sleep(uint32_t timems)
     ts.tv_nsec = (timems % 1000) * 1000000;
     nanosleep(&ts, NULL);
 }
+
+static __attribute__((stdcall)) void *KERNEL32_LoadLibraryA(const char *libraryName)
+{
+    LOG_EMULATED();
+
+    assert(libraryName != NULL);
+
+    LibraryTable *found = NULL;
+    for (LibraryTable *l = GLOBAL_LIBRARY_TABLE; l->libraryName != NULL; l++) {
+        if (strcasecmp(l->libraryName, libraryName) == 0) {
+            found = l;
+            break;
+        }
+    }
+
+    if (found == NULL) {
+        fprintf(stderr, "WARNING: Library '%s' not found.\n", libraryName);
+    }
+
+    return found;
+}
+
+static bool symbol_is_ordinal(const char *p)
+{
+    return (uint32_t)p <= 0xFFFF;
+}
+
+static bool symbol_compare(const char *s1, const char *s2)
+{
+        return
+            (symbol_is_ordinal(s1) && symbol_is_ordinal(s2) && s1 == s2) ||
+            (!symbol_is_ordinal(s1) && !symbol_is_ordinal(s2) && strcmp(s1, s2) == 0);
+}
+
+static __attribute__((stdcall)) void *KERNEL32_GetProcAddress(void *module, const char *procName)
+{
+    LOG_EMULATED();
+
+    assert(module != NULL);
+    assert(procName != NULL);
+
+    LibraryTable *lib = (LibraryTable *)module;
+    SymbolTable *found = NULL;
+
+    for (SymbolTable *s = lib->symbolTable; s->symbolName != NULL; s++) {
+        if (symbol_compare(s->symbolName, procName)) {
+            found = s;
+            break;
+        }
+    }
+
+    if (found == NULL) {
+        fprintf(stderr, "WARNING: Symbol '");
+        fprintf(stderr, symbol_is_ordinal(procName) ? "ORD:%p" : "%s", procName);
+        fprintf(stderr, "' not found on library %s.\n", lib->libraryName);
+    }
+
+    return found != NULL ? found->symbol : NULL;
+}
+
+static SymbolTable KERNEL32_SYMBOLS[] = {
+    { "GetCommandLineA", KERNEL32_GetCommandLineA },
+    { "GlobalFree", KERNEL32_GlobalFree },
+    { "CreateThread", KERNEL32_CreateThread },
+    { "GetModuleHandleA", KERNEL32_GetModuleHandleA },
+    { "LeaveCriticalSection", KERNEL32_LeaveCriticalSection },
+    { "ExitProcess", KERNEL32_ExitProcess },
+    { "InitializeCriticalSection", KERNEL32_InitializeCriticalSection },
+    { "SetThreadPriority", KERNEL32_SetThreadPriority },
+    { "EnterCriticalSection", KERNEL32_EnterCriticalSection },
+    { "CloseHandle", KERNEL32_CloseHandle },
+    { "DeleteCriticalSection", KERNEL32_DeleteCriticalSection },
+    { "GlobalAlloc", KERNEL32_GlobalAlloc },
+    { "Sleep", KERNEL32_Sleep },
+    { "TerminateThread", KERNEL32_TerminateThread },
+    { "LoadLibraryA", KERNEL32_LoadLibraryA },
+    { "GetProcAddress", KERNEL32_GetProcAddress },
+    { NULL, NULL }
+};
 
 // ------
 // USER32
@@ -675,6 +775,26 @@ static __attribute__((stdcall)) void *USER32_SetCursor(void *UNUSED(cursor))
     return NULL;
 }
 
+static SymbolTable USER32_SYMBOLS[] = {
+    { "CreateWindowExA", USER32_CreateWindowExA },
+    { "EndDialog", USER32_EndDialog },
+    { "OffsetRect", USER32_OffsetRect },
+    { "ClientToScreen", USER32_ClientToScreen },
+    { "GetSystemMetrics", USER32_GetSystemMetrics },
+    { "SetCursor", USER32_SetCursor },
+    { "DestroyWindow", USER32_DestroyWindow },
+    { "ShowWindow", USER32_ShowWindow },
+    { "SystemParametersInfoA", USER32_SystemParametersInfoA },
+    { "GetClientRect", USER32_GetClientRect },
+    { "RegisterClassA", USER32_RegisterClassA },
+    { "MessageBoxA", USER32_MessageBoxA },
+    { "DispatchMessageA", USER32_DispatchMessageA },
+    { "DefWindowProcA", USER32_DefWindowProcA },
+    { "PeekMessageA", USER32_PeekMessageA },
+    { "DialogBoxIndirectParamA", USER32_DialogBoxIndirectParamA },
+    { "SendDlgItemMessageA", USER32_SendDlgItemMessageA },
+    { NULL, NULL }
+};
 
 // -----
 // WINMM
@@ -686,6 +806,11 @@ static __attribute__((stdcall)) uint32_t WINMM_timeGetTime()
 
     return (uint32_t)getTimeStampMs();
 }
+
+static SymbolTable WINMM_SYMBOLS[] = {
+    { "timeGetTime", WINMM_timeGetTime },
+    { NULL, NULL }
+};
 
 // -----
 // DDRAW
@@ -917,6 +1042,26 @@ static __attribute__((stdcall)) void *DDRAW_DirectDrawCreate(
     return 0;
 }
 
+static SymbolTable DDRAW_SYMBOLS[] = {
+    { "DirectDrawCreate", DDRAW_DirectDrawCreate },
+    { NULL, NULL }
+};
+
+// ------------------------
+// SETUP & CALL ENTRY POINT
+// ------------------------
+
+static LibraryTable GLOBAL_LIBRARY_TABLE_TMP[] = {
+    { "ddraw.dll", DDRAW_SYMBOLS },
+    { "dsound.dll", DSOUND_SYMBOLS },
+    { "kernel32.dll", KERNEL32_SYMBOLS },
+    { "user32.dll", USER32_SYMBOLS },
+    { "winmm.dll", WINMM_SYMBOLS },
+    { NULL, NULL }
+};
+
+static LibraryTable *GLOBAL_LIBRARY_TABLE = GLOBAL_LIBRARY_TABLE_TMP;
+
 typedef void (*entrypoint_t)();
 
 int main(void) {
@@ -930,51 +1075,23 @@ int main(void) {
         return EXIT_FAILURE;
     }
 
-    FILE *h7exe = fopen("HEAVEN7W_C.EXE", "rb");
+    FILE *h7exe = fopen("HEAVEN7W.EXE", "rb");
     if (h7exe == NULL) {
         fprintf(stderr, "ERROR: Failed to open HEAVEN7 executable.\n");
         return EXIT_FAILURE;
     }
-    size_t r = fread(image, 1, IMAGESIZE, h7exe);
-    if (r != IMAGESIZE) {
+    size_t r1 = fread(image, 1, 0x400, h7exe);
+    size_t r2 = fread(image+0x1D000, 1, 0xFA00, h7exe);
+    size_t r3 = fread(image+0x2D000, 1, 0x200, h7exe);
+    if (r1+r2+r3 != 0x10000) {
         fprintf(stderr, "ERROR: Failed to read HEAVEN7 executable image.\n");
         return EXIT_FAILURE;
     }
 
-    *((void **)(image + 0xF000)) = DDRAW_DirectDrawCreate;
-    *((void **)(image + 0xF008)) = DSOUND_DirectSoundCreate;
-    *((void **)(image + 0xF010)) = KERNEL32_GetCommandLineA;
-    *((void **)(image + 0xF014)) = KERNEL32_GlobalFree;
-    *((void **)(image + 0xF018)) = KERNEL32_CreateThread;
-    *((void **)(image + 0xF01C)) = KERNEL32_GetModuleHandleA;
-    *((void **)(image + 0xF020)) = KERNEL32_LeaveCriticalSection;
-    *((void **)(image + 0xF024)) = KERNEL32_ExitProcess;
-    *((void **)(image + 0xF028)) = KERNEL32_InitializeCriticalSection;
-    *((void **)(image + 0xF02C)) = KERNEL32_SetThreadPriority;
-    *((void **)(image + 0xF030)) = KERNEL32_EnterCriticalSection;
-    *((void **)(image + 0xF034)) = KERNEL32_CloseHandle;
-    *((void **)(image + 0xF038)) = KERNEL32_DeleteCriticalSection;
-    *((void **)(image + 0xF03C)) = KERNEL32_GlobalAlloc;
-    *((void **)(image + 0xF040)) = KERNEL32_Sleep;
-    *((void **)(image + 0xF044)) = KERNEL32_TerminateThread;
-    *((void **)(image + 0xF04C)) = USER32_CreateWindowExA;
-    *((void **)(image + 0xF050)) = USER32_EndDialog;
-    *((void **)(image + 0xF054)) = USER32_OffsetRect;
-    *((void **)(image + 0xF058)) = USER32_ClientToScreen;
-    *((void **)(image + 0xF05C)) = USER32_GetSystemMetrics;
-    *((void **)(image + 0xF060)) = USER32_SetCursor;
-    *((void **)(image + 0xF064)) = USER32_DestroyWindow;
-    *((void **)(image + 0xF068)) = USER32_ShowWindow;
-    *((void **)(image + 0xF06C)) = USER32_SystemParametersInfoA;
-    *((void **)(image + 0xF070)) = USER32_GetClientRect;
-    *((void **)(image + 0xF074)) = USER32_RegisterClassA;
-    *((void **)(image + 0xF078)) = USER32_MessageBoxA;
-    *((void **)(image + 0xF07C)) = USER32_DispatchMessageA;
-    *((void **)(image + 0xF080)) = USER32_DefWindowProcA;
-    *((void **)(image + 0xF084)) = USER32_PeekMessageA;
-    *((void **)(image + 0xF088)) = USER32_DialogBoxIndirectParamA;
-    *((void **)(image + 0xF08C)) = USER32_SendDlgItemMessageA;
-    *((void **)(image + 0xF094)) = WINMM_timeGetTime;
+    // Set up symbols used by the unpacker to find the rest of the symbols
+    *((void **)(image + 0x2D078)) = KERNEL32_LoadLibraryA;
+    *((void **)(image + 0x2D07C)) = KERNEL32_GetProcAddress;
+    *((void **)(image + 0x2D080)) = KERNEL32_ExitProcess;
 
     if (mprotect(image, IMAGESIZE, PROT_READ | PROT_WRITE | PROT_EXEC) != 0) {
         fprintf(stderr, "ERROR: Failed to change HEAVEN7 executable memory protection.\n");
