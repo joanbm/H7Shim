@@ -3,7 +3,7 @@ FROM debian:bullseye
 RUN dpkg --add-architecture i386 \
  && apt-get update \
  && apt-get install --no-install-recommends -o APT::Immediate-Configure=false -y \
-      upx cmake gcc-multilib make libsdl2-dev:i386 \
+      cmake gcc-multilib make libsdl2-dev:i386 \
  && rm -rf /var/lib/apt/lists/*
 
 COPY . /h7shim
