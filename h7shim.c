@@ -13,16 +13,6 @@
 #define IMAGESIZE 0x2E000
 #define ENTRYPOINT 0x42C8A0
 
-static const struct Resolution {
-    int width;
-    int height;
-} RESOLUTION_DATA[4] = {
-    { 320, 240 },
-    { 512, 384 },
-    { 640, 480 },
-    { 800, 600 },
-};
-
 #define SETTING_RESOLUTION 3 // See above
 #define SETTING_TRACER 0 // 0 = 1x1, 1 = 2x2, 2 = 4x4
 #define SETTING_NOSOUND 0
@@ -50,7 +40,6 @@ static bool dump_audio = true;
 #define STUB() do { printf("[!] %s STUB!\n", __func__); raise(SIGSEGV); } while(0)
 
 static uint8_t *memcontrolblock = NULL;
-static uint32_t surfaceptr[0x1000000/4];
 static uint32_t frame_counter = 0;
 
 typedef struct SymbolTable
@@ -70,10 +59,10 @@ typedef struct LibraryTable
 static LibraryTable *GLOBAL_LIBRARY_TABLE;
 
 // Creates a BMP file containing a visual representation of the given cellular automaton state
-static bool write_bmp(size_t sizex, size_t sizey, uint32_t *pixbuf, const char *output_file_path)
+static bool write_bmp(int width, int height, int pitch, void *pixbuf, const char *output_file_path)
 {
     SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormatFrom(
-        pixbuf, sizex, sizey, 32, sizex*4, SDL_PIXELFORMAT_RGB888);
+        pixbuf, width, height, 32, pitch, SDL_PIXELFORMAT_RGB888);
     if (surface == NULL)
         return false;
 
@@ -314,7 +303,9 @@ static __attribute__((stdcall)) void *DSOUND_CreateSoundBuffer(
         wav_spec.freq = freq * SPEEDUP_FACTOR;
         wav_spec.format = AUDIO_S16;
         wav_spec.channels = 2;
-        wav_spec.samples = 4096;
+        // Make the audio buffer small, because H7 uses the consumed audio samples
+        // for video timing, so a big audio buffer results in a choppy frame rate
+        wav_spec.samples = 512;
         wav_spec.callback = AudioCallback;
         wav_spec.userdata = bufferobj;
 
@@ -816,11 +807,35 @@ static SymbolTable WINMM_SYMBOLS[] = {
 // DDRAW
 // -----
 
+typedef struct DDRAW_Surface_Object
+{
+    void *vtable;
+
+    bool is_primary;
+    int width;
+    int height;
+    SDL_Window *window;
+    SDL_Renderer *renderer;
+    SDL_Texture *texture;
+
+    void *pixbuf;
+    int pitch;
+} DDRAW_Surface_Object;
+
 static __attribute__((stdcall)) uint32_t DDRAW_Surface_Release(void *cominterface)
 {
     LOG_EMULATED();
 
     assert(cominterface != NULL);
+
+    DDRAW_Surface_Object *surfaceobj = cominterface;
+    if (!surfaceobj->is_primary) {
+        SDL_DestroyTexture(surfaceobj->texture);
+        SDL_DestroyRenderer(surfaceobj->renderer);
+        SDL_DestroyWindow(surfaceobj->window);
+    }
+    free(surfaceobj);
+
     return 0;
 }
 
@@ -869,10 +884,16 @@ static __attribute__((stdcall)) void *DDRAW_Surface_Lock(void *cominterface, voi
     assert(flags == 1);
     assert(event == NULL);
 
+    DDRAW_Surface_Object *surfaceobj = (DDRAW_Surface_Object *)cominterface;
+    assert(!surfaceobj->is_primary);
+    assert(surfaceobj->pixbuf == NULL);
+
+    SDL_LockTexture(surfaceobj->texture, NULL, &surfaceobj->pixbuf, &surfaceobj->pitch);
+
     // pitch
-    *((uint32_t *)surface_desc+0x10/4) = RESOLUTION_DATA[SETTING_RESOLUTION].width*4;
+    *((uint32_t *)surface_desc+0x10/4) = (uint32_t)surfaceobj->pitch;
     // Surface data pointer
-    *((void **)surface_desc+0x24/4) = surfaceptr;
+    *((void **)surface_desc+0x24/4) = surfaceobj->pixbuf;
 
     return 0;
 }
@@ -897,13 +918,32 @@ static __attribute__((stdcall)) void *DDRAW_Surface_Unlock(void *cominterface, v
     assert(cominterface != NULL);
     assert(rect != NULL);
 
+    DDRAW_Surface_Object *surfaceobj = (DDRAW_Surface_Object *)cominterface;
+    assert(!surfaceobj->is_primary);
+    assert(surfaceobj->pixbuf != NULL);
+
     if (dump_frames) {
         char bmp_name[100];
         sprintf(bmp_name, "/tmp/h7screen_%06u.bmp", frame_counter);
-        if (!write_bmp(RESOLUTION_DATA[SETTING_RESOLUTION].width, RESOLUTION_DATA[SETTING_RESOLUTION].height, surfaceptr, bmp_name)) {
+        if (!write_bmp(surfaceobj->width, surfaceobj->height, surfaceobj->pitch, surfaceobj->pixbuf, bmp_name)) {
             fprintf(stderr, "WARNING: Could not write to dump bitmap file, result may be incomplete.\n");
         }
         frame_counter++;
+    }
+
+    SDL_UnlockTexture(surfaceobj->texture);
+    surfaceobj->pixbuf = NULL;
+
+    SDL_RenderClear(surfaceobj->renderer);
+    SDL_RenderCopy(surfaceobj->renderer, surfaceobj->texture, NULL, NULL);
+    SDL_RenderPresent(surfaceobj->renderer);
+
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+        if (event.type == SDL_QUIT) {
+            // TODO: Ideally should not just exit the process but rather notify the H7 main loop
+            exit(EXIT_SUCCESS);
+        }
     }
 
     return  0;
@@ -919,12 +959,6 @@ static void *DDRAW_Surface_VTABLE[256] = {
     [0x70/4] = DDRAW_Surface_SetClipper,
     [0x80/4] = DDRAW_Surface_Unlock,
 };
-
-static struct DDRAW_Surface_Object
-{
-    void *vtable;
-} DDRAW_Surface_NULLOBJECT = { DDRAW_Surface_VTABLE };
-
 
 static __attribute__((stdcall)) uint32_t DDRAW_Clipper_Release(void *cominterface)
 {
@@ -983,7 +1017,42 @@ static __attribute__((stdcall)) void *DDRAW_CreateSurface(
     assert(surface != NULL);
     assert(outer == NULL);
 
-    *surface = &DDRAW_Surface_NULLOBJECT;
+    bool is_primary_surface = *(uint32_t *)((uint8_t *)surface_desc + 104) & 0x200; // DDSCAPS_PRIMARYSURFACE
+    uint32_t height = *(uint32_t *)((uint8_t *)surface_desc + 8);
+    uint32_t width = *(uint32_t *)((uint8_t *)surface_desc + 12);
+
+    DDRAW_Surface_Object *surfaceobj = malloc(sizeof(DDRAW_Surface_Object));
+    surfaceobj->vtable = DDRAW_Surface_VTABLE;
+    surfaceobj->is_primary = is_primary_surface;
+    surfaceobj->width = !is_primary_surface ? (int)width : 0;
+    surfaceobj->height = !is_primary_surface ? (int)height : 0;
+    surfaceobj->window = NULL;
+    surfaceobj->renderer = NULL;
+    surfaceobj->texture = NULL;
+    surfaceobj->pixbuf = NULL;
+
+    if (!is_primary_surface) {
+        surfaceobj->window = SDL_CreateWindow("HEAVEN7",
+                                              SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+                                              width, height, 0);
+        if (surfaceobj->window == NULL) {
+            fprintf(stderr, "Couldn't open SDL window: %s\n", SDL_GetError());
+            exit(EXIT_FAILURE);
+        }
+        surfaceobj->renderer = SDL_CreateRenderer(surfaceobj->window, -1, 0);
+        if (surfaceobj->renderer == NULL) {
+            fprintf(stderr, "Couldn't open SDL renderer: %s\n", SDL_GetError());
+            exit(EXIT_FAILURE);
+        }
+        surfaceobj->texture = SDL_CreateTexture(surfaceobj->renderer, SDL_PIXELFORMAT_ARGB8888,
+                                                SDL_TEXTUREACCESS_STREAMING, width, height);
+        if (surfaceobj->texture == NULL) {
+            fprintf(stderr, "Couldn't open SDL texture: %s\n", SDL_GetError());
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    *surface = surfaceobj;
     return 0;
 }
 static __attribute__((stdcall)) void *DDRAW_RestoreDisplayMode(void *cominterface)
