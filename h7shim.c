@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <assert.h>
+#include <limits.h>
 #include <signal.h>
 #include <sys/mman.h>
 #include <sys/time.h>
@@ -69,11 +70,16 @@ static bool write_bmp(int width, int height, int pitch, void *pixbuf, const char
     return ret;
 }
 
-static uint64_t getTimeStampMs()
+static uint64_t getTimeStampMs(void)
 {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return (tv.tv_sec * 1000 + tv.tv_usec / 1000) * SPEEDUP_FACTOR;
+    struct timespec tp;
+    int r = clock_gettime(CLOCK_MONOTONIC, &tp);
+    if (r == -1) {
+        fprintf(stderr, "Couldn't get the time\n");
+        exit(EXIT_FAILURE);
+    }
+    uint64_t time_ms = ((uint64_t)tp.tv_sec * 1000 + (uint64_t)tp.tv_nsec / 1000000);
+    return time_ms * SPEEDUP_FACTOR;
 }
 
 // ------
@@ -104,7 +110,7 @@ static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_GetStatus(void *com
     return 0;
 }
 
-static __attribute__((stdcall)) void DSOUND_SoundBufferImpl_Restore()
+static __attribute__((stdcall)) void DSOUND_SoundBufferImpl_Restore(void)
 {
     STUB();
 }
@@ -284,7 +290,9 @@ static __attribute__((stdcall)) void *DSOUND_CreateSoundBuffer(
     bool is_primary_buffer = *(uint32_t *)((uint8_t *)buffer_desc + 4) & 1;
     uint32_t buffer_size = *(uint32_t *)((uint8_t *)buffer_desc + 8);
     void *waveformatex = *(void **)((uint8_t *)buffer_desc + 16);
-    uint32_t freq = waveformatex != NULL ? *(uint32_t *)((uint8_t *)waveformatex + 4) : 0;
+    uint32_t raw_freq = waveformatex != NULL ? *(uint32_t *)((uint8_t *)waveformatex + 4) : 0;
+    assert(raw_freq < INT_MAX);
+    int freq = (int)raw_freq;
 
     DSound_SoundBufferImpl_Object *bufferobj = malloc(sizeof(DSound_SoundBufferImpl_Object));
     bufferobj->vtable = DSound_SoundBufferImpl_VTABLE;
@@ -474,7 +482,7 @@ static __attribute__((stdcall)) void KERNEL32_DeleteCriticalSection(void *pcs)
 
 // **MISC**
 
-static __attribute__((stdcall)) char *KERNEL32_GetCommandLineA()
+static __attribute__((stdcall)) char *KERNEL32_GetCommandLineA(void)
 {
     LOG_EMULATED();
 
@@ -495,6 +503,7 @@ static __attribute__((stdcall)) void *KERNEL32_GetModuleHandleA(const char *modu
 static __attribute__((stdcall)) void KERNEL32_ExitProcess(uint32_t exitcode)
 {
     LOG_EMULATED();
+    assert(exitcode < INT_MAX);
     exit((int)exitcode);
 }
 
@@ -503,8 +512,8 @@ static __attribute__((stdcall)) void KERNEL32_Sleep(uint32_t timems)
     LOG_EMULATED();
 
     struct timespec ts;
-    ts.tv_sec = timems / 1000;
-    ts.tv_nsec = (timems % 1000) * 1000000;
+    ts.tv_sec = (time_t)(timems / 1000);
+    ts.tv_nsec = (long)((timems % 1000) * 1000000);
     nanosleep(&ts, NULL);
 }
 
@@ -621,12 +630,12 @@ static __attribute__((stdcall)) uint32_t USER32_ShowWindow(void *hwnd, uint32_t 
     return 0;
 }
 
-static __attribute__((stdcall)) void USER32_DispatchMessageA()
+static __attribute__((stdcall)) void USER32_DispatchMessageA(void)
 {
     STUB();
 }
 
-static __attribute__((stdcall)) void USER32_DefWindowProcA()
+static __attribute__((stdcall)) void USER32_DefWindowProcA(void)
 {
     STUB();
 }
@@ -713,7 +722,7 @@ static __attribute__((stdcall)) uint32_t USER32_EndDialog(void *UNUSED(hdlg), in
 
 // **MISC**
 
-static __attribute__((stdcall)) void USER32_MessageBoxA()
+static __attribute__((stdcall)) void USER32_MessageBoxA(void)
 {
     STUB();
 }
@@ -785,7 +794,7 @@ static SymbolTable USER32_SYMBOLS[] = {
 // WINMM
 // -----
 
-static __attribute__((stdcall)) uint32_t WINMM_timeGetTime()
+static __attribute__((stdcall)) uint32_t WINMM_timeGetTime(void)
 {
     LOG_EMULATED();
 
@@ -891,7 +900,7 @@ static __attribute__((stdcall)) void *DDRAW_Surface_Lock(void *cominterface, voi
 
     return 0;
 }
-static __attribute__((stdcall)) void DDRAW_Surface_Restore()
+static __attribute__((stdcall)) void DDRAW_Surface_Restore(void)
 {
     STUB();
 }
@@ -1012,14 +1021,16 @@ static __attribute__((stdcall)) void *DDRAW_CreateSurface(
     assert(outer == NULL);
 
     bool is_primary_surface = *(uint32_t *)((uint8_t *)surface_desc + 104) & 0x200; // DDSCAPS_PRIMARYSURFACE
-    uint32_t height = *(uint32_t *)((uint8_t *)surface_desc + 8);
-    uint32_t width = *(uint32_t *)((uint8_t *)surface_desc + 12);
+    uint32_t raw_height = *(uint32_t *)((uint8_t *)surface_desc + 8);
+    uint32_t raw_width = *(uint32_t *)((uint8_t *)surface_desc + 12);
+    assert(raw_height < INT_MAX && raw_width < INT_MAX);
+    int height = (int)raw_height, width = (int)raw_width;
 
     DDRAW_Surface_Object *surfaceobj = malloc(sizeof(DDRAW_Surface_Object));
     surfaceobj->vtable = DDRAW_Surface_VTABLE;
     surfaceobj->is_primary = is_primary_surface;
-    surfaceobj->width = !is_primary_surface ? (int)width : 0;
-    surfaceobj->height = !is_primary_surface ? (int)height : 0;
+    surfaceobj->width = !is_primary_surface ? width : 0;
+    surfaceobj->height = !is_primary_surface ? height : 0;
     surfaceobj->window = NULL;
     surfaceobj->renderer = NULL;
     surfaceobj->texture = NULL;
@@ -1125,7 +1136,7 @@ static LibraryTable GLOBAL_LIBRARY_TABLE_TMP[] = {
 
 static LibraryTable *GLOBAL_LIBRARY_TABLE = GLOBAL_LIBRARY_TABLE_TMP;
 
-typedef void (*entrypoint_t)();
+typedef void (*entrypoint_t)(void);
 
 int main(void) {
     if (SDL_Init(SDL_INIT_AUDIO) < 0)
