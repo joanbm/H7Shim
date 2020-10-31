@@ -13,11 +13,10 @@
 #define IMAGESIZE 0x2E000
 #define ENTRYPOINT 0x42C8A0
 
-#define SETTING_RESOLUTION 3 // See above
+#define SETTING_RESOLUTION 3 // 0 = 320x240, 1 = 512x384, 2 = 640x480, 3 = 800x600
 #define SETTING_TRACER 0 // 0 = 1x1, 1 = 2x2, 2 = 4x4
-#define SETTING_NOSOUND 0
-#define SETTING_SOUND44KHZ 0
-#define SETTING_FULLSCREEN 1 // 0 or 1
+#define SETTING_SOUND 0 // 0 = 44 Khz, 1 = 22 Khz, 2 = Disabled
+#define SETTING_WINDOWED 0 // 0 or 1
 #define SETTING_NOTEXT 0 // 0 or 1
 #define SETTING_LOOP 0 // 0 or 1
 
@@ -39,7 +38,6 @@ static bool dump_audio = true;
 
 #define STUB() do { printf("[!] %s STUB!\n", __func__); raise(SIGSEGV); } while(0)
 
-static uint8_t *memcontrolblock = NULL;
 static uint32_t frame_counter = 0;
 
 typedef struct SymbolTable
@@ -387,15 +385,7 @@ static __attribute__((stdcall)) void *KERNEL32_GlobalAlloc(uint32_t flags, uint3
 
     assert(flags == 0);
 
-    void *alloc_addr = malloc(memsize);
-
-    if (memcontrolblock == NULL) {
-        uintptr_t addr = (uintptr_t)alloc_addr;
-        addr = (addr + 31) & ~31;
-        memcontrolblock = (uint8_t *)addr;
-    }
-
-    return alloc_addr;
+    return malloc(memsize);
 }
 
 static __attribute__((stdcall)) void *KERNEL32_GlobalFree(void *ptr)
@@ -681,40 +671,44 @@ static __attribute__((stdcall)) uint32_t USER32_GetClientRect(void *hwnd, void *
 
 // **DIALOG**
 
+typedef intptr_t (*DialogProc)(void *hdlg, uint32_t msg, uintptr_t wparam, intptr_t lparam);
+
 static __attribute__((stdcall)) uint32_t USER32_DialogBoxIndirectParamA(
     void *UNUSED(instance), void *UNUSED(dialogTemplate),
-    void *UNUSED(hwndParent), void *UNUSED(dialogFunc), void *UNUSED(initParam))
+    void *UNUSED(hwndParent), DialogProc dialogFunc, void *UNUSED(initParam))
 {
     LOG_EMULATED();
 
-    // Here we don't do the dialog for now, but instead we
-    // do some high level emulation of it
-    // NOTES:
-    // EBP = Start of memory allocated by first GlobalAlloc
-    // ControlId 0x3EB = Resolution combobox, index goes to EBP+0x10
-    // ControlId 0x3EC = Tracer combobox, index goes to EBP+0x58
-    // ControlId 0x3F1 = Sound combobox, EBP+0x14 = 0x0 44 Khz, 0x100 22 Khz, 0x1 No sound
-    // ControlId 0x3EE = Windowed checkbox, _negated_ bool goes to EBP+0x150
-    // ControlId 0x3ED = No text checkbox, bool goes to EBP+0x18
-    // ControlId 0x3EF = Looping checkbox, bool goes to EBP+0x1C
-    *(uint32_t *)(memcontrolblock+0x10) = SETTING_RESOLUTION;
-    *(uint32_t *)(memcontrolblock+0x58) = SETTING_TRACER;
-    *(uint32_t *)(memcontrolblock+0x14) = SETTING_NOSOUND | (SETTING_SOUND44KHZ << 8);
-    *(uint32_t *)(memcontrolblock+0x150) = SETTING_FULLSCREEN;
-    *(uint32_t *)(memcontrolblock+0x18) = SETTING_NOTEXT;
-    *(uint32_t *)(memcontrolblock+0x1C) = SETTING_LOOP;
-
+    dialogFunc(NULL, 0x111 /* WM_COMMAND */, 1 /* Accept button */, 12345);
     return 1;
 }
 
-static __attribute__((stdcall)) void USER32_SendDlgItemMessageA()
+static __attribute__((stdcall)) intptr_t USER32_SendDlgItemMessageA(void *UNUSED(hdlg),
+    int controlid, uint32_t UNUSED(msg), uintptr_t UNUSED(wparam), intptr_t UNUSED(lparam))
 {
-    STUB();
+    LOG_EMULATED();
+
+    if (controlid == 0x3EB) // Resolution combobox
+        return SETTING_RESOLUTION;
+    if (controlid == 0x3EC) // Tracer combobox
+        return SETTING_TRACER;
+    if (controlid == 0x3F1) // Sound combobox
+        return SETTING_SOUND;
+    if (controlid == 0x3EE) // Windowed checkbox
+        return SETTING_WINDOWED;
+    if (controlid == 0x3ED) // No text checkbox
+        return SETTING_NOTEXT;
+    if (controlid == 0x3EF) // Looping checkbox
+        return SETTING_LOOP;
+
+    assert(0);
 }
 
-static __attribute__((stdcall)) void USER32_EndDialog()
+static __attribute__((stdcall)) uint32_t USER32_EndDialog(void *UNUSED(hdlg), intptr_t UNUSED(result))
 {
-    STUB();
+    LOG_EMULATED();
+
+    return 1;
 }
 
 // **MISC**
