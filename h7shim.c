@@ -7,7 +7,6 @@
 #include <signal.h>
 #include <time.h>
 #include <sys/mman.h>
-#include <sys/time.h>
 #include <pthread.h>
 #include <SDL.h>
 
@@ -76,18 +75,6 @@ static bool write_bmp(int width, int height, int pitch, void *pixbuf, const char
     bool ret = SDL_SaveBMP(surface, output_file_path) == 0;
     SDL_FreeSurface(surface);
     return ret;
-}
-
-static uint64_t getTimeStampMs(void)
-{
-    struct timespec tp;
-    int r = clock_gettime(CLOCK_MONOTONIC, &tp);
-    if (r == -1) {
-        fprintf(stderr, "Couldn't get the time\n");
-        exit(EXIT_FAILURE);
-    }
-    uint64_t time_ms = ((uint64_t)tp.tv_sec * 1000 + (uint64_t)tp.tv_nsec / 1000000);
-    return time_ms * SPEEDUP_FACTOR;
 }
 
 // ------
@@ -806,7 +793,7 @@ static API_CALLBACK uint32_t WINMM_timeGetTime(void)
 {
     LOG_EMULATED();
 
-    return (uint32_t)getTimeStampMs();
+    return SDL_GetTicks() * SPEEDUP_FACTOR;
 }
 
 static SymbolTable WINMM_SYMBOLS[] = {
