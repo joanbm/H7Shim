@@ -1035,18 +1035,13 @@ static API_CALLBACK void *DDRAW_CreateSurface(
     surfaceobj->pixbuf = NULL;
 
     if (!is_primary_surface) {
-        surfaceobj->window = SDL_CreateWindow("HEAVEN7",
-                                              SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-                                              width, height, 0);
-        if (surfaceobj->window == NULL) {
-            fprintf(stderr, "Couldn't open SDL window: %s\n", SDL_GetError());
+        int r = SDL_CreateWindowAndRenderer(width, height, 0, &surfaceobj->window, &surfaceobj->renderer);
+        if (r == -1) {
+            fprintf(stderr, "Couldn't open SDL window and renderer: %s\n", SDL_GetError());
             exit(EXIT_FAILURE);
         }
-        surfaceobj->renderer = SDL_CreateRenderer(surfaceobj->window, -1, 0);
-        if (surfaceobj->renderer == NULL) {
-            fprintf(stderr, "Couldn't open SDL renderer: %s\n", SDL_GetError());
-            exit(EXIT_FAILURE);
-        }
+        SDL_SetWindowTitle(surfaceobj->window, "HEAVEN7");
+
         surfaceobj->texture = SDL_CreateTexture(surfaceobj->renderer, SDL_PIXELFORMAT_ARGB8888,
                                                 SDL_TEXTUREACCESS_STREAMING, width, height);
         if (surfaceobj->texture == NULL) {
