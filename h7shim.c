@@ -1146,7 +1146,7 @@ static LibraryTable *GLOBAL_LIBRARY_TABLE = GLOBAL_LIBRARY_TABLE_TMP;
 typedef void (*entrypoint_t)(void);
 
 int main(void) {
-    if (SDL_Init(SDL_INIT_AUDIO) < 0)
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0)
             return EXIT_FAILURE;
 
     uint8_t *image = mmap((void *)IMAGEBASE, IMAGESIZE, PROT_READ | PROT_WRITE,
