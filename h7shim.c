@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <limits.h>
 #include <signal.h>
+#include <time.h>
 #include <sys/mman.h>
 #include <sys/time.h>
 #include <pthread.h>
