@@ -1,5 +1,5 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 curl -L "https://files.scene.org/get/parties/2000/mekkasymposium00/in64/h7-final.zip" > /tmp/h7-final.zip
 # shellcheck disable=SC2094
 unzip -p /tmp/h7-final.zip HEAVEN7W.EXE > HEAVEN7W.EXE
