@@ -37,6 +37,13 @@ static bool dump_audio = true;
 #define LOG_EMULATED() do { } while(0)
 #endif
 
+// This attribute needs to be applied to all calls from HEAVEN7 application code back to our code
+// It sets stdcall because this is the calling convention used for Win32 APIs,
+// and force_align_arg_pointer because if some libraries (SDL mostly) uses SSE code,
+// we need to make sure the stack is properly re-aligned after HEAVEN7 de-aligned it,
+// or the SSE instructions will cause a crash due to an unaligned load/store
+#define API_CALLBACK __attribute__((stdcall)) __attribute__((force_align_arg_pointer))
+
 #define STUB() do { printf("[!] %s STUB!\n", __func__); raise(SIGSEGV); } while(0)
 
 static uint32_t frame_counter = 0;
@@ -99,7 +106,7 @@ typedef struct DSound_SoundBufferImpl_Object
     FILE *dumpfile;
 } DSound_SoundBufferImpl_Object;
 
-static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_GetStatus(void *cominterface, uint32_t *status)
+static API_CALLBACK void *DSOUND_SoundBufferImpl_GetStatus(void *cominterface, uint32_t *status)
 {
     LOG_EMULATED();
 
@@ -110,12 +117,12 @@ static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_GetStatus(void *com
     return 0;
 }
 
-static __attribute__((stdcall)) void DSOUND_SoundBufferImpl_Restore(void)
+static API_CALLBACK void DSOUND_SoundBufferImpl_Restore(void)
 {
     STUB();
 }
 
-static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_Lock(
+static API_CALLBACK void *DSOUND_SoundBufferImpl_Lock(
     void *cominterface,
     uint32_t dwOffset, uint32_t dwBytes,
     void **ppvAudioPtr1, uint32_t *pdwAudioBytes1,
@@ -144,7 +151,7 @@ static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_Lock(
     return NULL;
 }
 
-static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_Unlock(
+static API_CALLBACK void *DSOUND_SoundBufferImpl_Unlock(
     void *cominterface, void *pvAudioPtr1, uint32_t dwAudioBytes1,
     void *UNUSED(pvAudioPtr2), uint32_t UNUSED(dwAudioBytes2))
 {
@@ -163,7 +170,7 @@ static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_Unlock(
     return NULL;
 }
 
-static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_SetFormat(void *cominterface, void *format)
+static API_CALLBACK void *DSOUND_SoundBufferImpl_SetFormat(void *cominterface, void *format)
 {
     LOG_EMULATED();
 
@@ -173,7 +180,7 @@ static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_SetFormat(void *com
     return 0;
 }
 
-static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_Play(
+static API_CALLBACK void *DSOUND_SoundBufferImpl_Play(
          void *cominterface,
          uint32_t UNUSED(dwReserved1),
          uint32_t UNUSED(dwPriority),
@@ -191,7 +198,7 @@ static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_Play(
     return 0;
 }
 
-static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_GetCurrentPosition(
+static API_CALLBACK void *DSOUND_SoundBufferImpl_GetCurrentPosition(
     void *cominterface, uint32_t *pdwCurrentPlayCursor, uint32_t *pdwCurrentWriteCursor)
 {
     LOG_EMULATED();
@@ -208,7 +215,7 @@ static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_GetCurrentPosition(
     return 0;
 }
 
-static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_Stop(void *cominterface)
+static API_CALLBACK void *DSOUND_SoundBufferImpl_Stop(void *cominterface)
 {
     LOG_EMULATED();
 
@@ -223,7 +230,7 @@ static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_Stop(void *cominter
     return 0;
 }
 
-static __attribute__((stdcall)) void *DSOUND_SoundBufferImpl_Release(void *cominterface)
+static API_CALLBACK void *DSOUND_SoundBufferImpl_Release(void *cominterface)
 {
     LOG_EMULATED();
 
@@ -277,7 +284,7 @@ static void AudioCallback(void *userdata, Uint8 *stream, int len)
     memset(stream + stream_pos, 0, stream_len);
 }
 
-static __attribute__((stdcall)) void *DSOUND_CreateSoundBuffer(
+static API_CALLBACK void *DSOUND_CreateSoundBuffer(
     void *cominterface, void *buffer_desc, void **ppdsb, void *unk)
 {
     LOG_EMULATED();
@@ -333,7 +340,7 @@ static __attribute__((stdcall)) void *DSOUND_CreateSoundBuffer(
     return 0;
 }
 
-static __attribute__((stdcall)) void *DSOUND_SetCooperativeLevel(
+static API_CALLBACK void *DSOUND_SetCooperativeLevel(
     void *cominterface, void *hwnd, uint32_t UNUSED(flags))
 {
     LOG_EMULATED();
@@ -344,7 +351,7 @@ static __attribute__((stdcall)) void *DSOUND_SetCooperativeLevel(
     return 0;
 }
 
-static __attribute__((stdcall)) void *DSOUND_Release(void *cominterface)
+static API_CALLBACK void *DSOUND_Release(void *cominterface)
 {
     LOG_EMULATED();
 
@@ -363,7 +370,7 @@ static struct DSOUND_Object
     void *vtable;
 } DSOUND_NULLOBJECT = { DSOUND_VTABLE };
 
-static __attribute__((stdcall)) void *DSOUND_DirectSoundCreate(
+static API_CALLBACK void *DSOUND_DirectSoundCreate(
    void *guid, void **lpds, void *unkouter)
 {
     LOG_EMULATED();
@@ -387,7 +394,7 @@ static SymbolTable DSOUND_SYMBOLS[] = {
 
 // **MEMORY**
 
-static __attribute__((stdcall)) void *KERNEL32_GlobalAlloc(uint32_t flags, uint32_t memsize)
+static API_CALLBACK void *KERNEL32_GlobalAlloc(uint32_t flags, uint32_t memsize)
 {
     LOG_EMULATED();
 
@@ -396,7 +403,7 @@ static __attribute__((stdcall)) void *KERNEL32_GlobalAlloc(uint32_t flags, uint3
     return malloc(memsize);
 }
 
-static __attribute__((stdcall)) void *KERNEL32_GlobalFree(void *ptr)
+static API_CALLBACK void *KERNEL32_GlobalFree(void *ptr)
 {
     LOG_EMULATED();
     free(ptr);
@@ -405,7 +412,7 @@ static __attribute__((stdcall)) void *KERNEL32_GlobalFree(void *ptr)
 
 // **THREADING**
 
-static __attribute__((stdcall)) void *KERNEL32_CreateThread(
+static API_CALLBACK void *KERNEL32_CreateThread(
       void *UNUSED(lpThreadAttributes), uint32_t UNUSED(dwStackSize), void *lpStartAddress,
       void *lpParameter, uint32_t UNUSED(dwCreationFlags), uint32_t *UNUSED(lpThreadId)
 )
@@ -417,14 +424,14 @@ static __attribute__((stdcall)) void *KERNEL32_CreateThread(
     return thread;
 }
 
-static __attribute__((stdcall)) uint32_t KERNEL32_SetThreadPriority(void *UNUSED(thread), int UNUSED(priority))
+static API_CALLBACK uint32_t KERNEL32_SetThreadPriority(void *UNUSED(thread), int UNUSED(priority))
 {
     LOG_EMULATED();
 
     return 1;
 }
 
-static __attribute__((stdcall)) uint32_t KERNEL32_TerminateThread(void *thread, uint32_t UNUSED(exitCode))
+static API_CALLBACK uint32_t KERNEL32_TerminateThread(void *thread, uint32_t UNUSED(exitCode))
 {
     LOG_EMULATED();
 
@@ -434,7 +441,7 @@ static __attribute__((stdcall)) uint32_t KERNEL32_TerminateThread(void *thread, 
     return 1;
 }
 
-static __attribute__((stdcall)) uint32_t KERNEL32_CloseHandle(void *object)
+static API_CALLBACK uint32_t KERNEL32_CloseHandle(void *object)
 {
     LOG_EMULATED();
 
@@ -446,7 +453,7 @@ static __attribute__((stdcall)) uint32_t KERNEL32_CloseHandle(void *object)
 
 // **CRITICAL SECTION**
 
-static __attribute__((stdcall)) void KERNEL32_InitializeCriticalSection(void *pcs)
+static API_CALLBACK void KERNEL32_InitializeCriticalSection(void *pcs)
 {
     LOG_EMULATED();
 
@@ -455,7 +462,7 @@ static __attribute__((stdcall)) void KERNEL32_InitializeCriticalSection(void *pc
     *((pthread_mutex_t **)pcs) = mutex;
 }
 
-static __attribute__((stdcall)) void KERNEL32_EnterCriticalSection(void *pcs)
+static API_CALLBACK void KERNEL32_EnterCriticalSection(void *pcs)
 {
     LOG_EMULATED();
 
@@ -463,7 +470,7 @@ static __attribute__((stdcall)) void KERNEL32_EnterCriticalSection(void *pcs)
     pthread_mutex_lock(mutex);
 }
 
-static __attribute__((stdcall)) void KERNEL32_LeaveCriticalSection(void *pcs)
+static API_CALLBACK void KERNEL32_LeaveCriticalSection(void *pcs)
 {
     LOG_EMULATED();
 
@@ -471,7 +478,7 @@ static __attribute__((stdcall)) void KERNEL32_LeaveCriticalSection(void *pcs)
     pthread_mutex_unlock(mutex);
 }
 
-static __attribute__((stdcall)) void KERNEL32_DeleteCriticalSection(void *pcs)
+static API_CALLBACK void KERNEL32_DeleteCriticalSection(void *pcs)
 {
     LOG_EMULATED();
 
@@ -482,7 +489,7 @@ static __attribute__((stdcall)) void KERNEL32_DeleteCriticalSection(void *pcs)
 
 // **MISC**
 
-static __attribute__((stdcall)) char *KERNEL32_GetCommandLineA(void)
+static API_CALLBACK char *KERNEL32_GetCommandLineA(void)
 {
     LOG_EMULATED();
 
@@ -491,7 +498,7 @@ static __attribute__((stdcall)) char *KERNEL32_GetCommandLineA(void)
 }
 
 
-static __attribute__((stdcall)) void *KERNEL32_GetModuleHandleA(const char *moduleName)
+static API_CALLBACK void *KERNEL32_GetModuleHandleA(const char *moduleName)
 {
     LOG_EMULATED();
 
@@ -500,14 +507,14 @@ static __attribute__((stdcall)) void *KERNEL32_GetModuleHandleA(const char *modu
 }
 
 
-static __attribute__((stdcall)) void KERNEL32_ExitProcess(uint32_t exitcode)
+static API_CALLBACK void KERNEL32_ExitProcess(uint32_t exitcode)
 {
     LOG_EMULATED();
     assert(exitcode < INT_MAX);
     exit((int)exitcode);
 }
 
-static __attribute__((stdcall)) void KERNEL32_Sleep(uint32_t timems)
+static API_CALLBACK void KERNEL32_Sleep(uint32_t timems)
 {
     LOG_EMULATED();
 
@@ -517,7 +524,7 @@ static __attribute__((stdcall)) void KERNEL32_Sleep(uint32_t timems)
     nanosleep(&ts, NULL);
 }
 
-static __attribute__((stdcall)) void *KERNEL32_LoadLibraryA(const char *libraryName)
+static API_CALLBACK void *KERNEL32_LoadLibraryA(const char *libraryName)
 {
     LOG_EMULATED();
 
@@ -550,7 +557,7 @@ static bool symbol_compare(const char *s1, const char *s2)
             (!symbol_is_ordinal(s1) && !symbol_is_ordinal(s2) && strcmp(s1, s2) == 0);
 }
 
-static __attribute__((stdcall)) void *KERNEL32_GetProcAddress(void *module, const char *procName)
+static API_CALLBACK void *KERNEL32_GetProcAddress(void *module, const char *procName)
 {
     LOG_EMULATED();
 
@@ -602,7 +609,7 @@ static SymbolTable KERNEL32_SYMBOLS[] = {
 
 // **WINDOW**
 
-static __attribute__((stdcall)) void *USER32_RegisterClassA(const void *wndClass)
+static API_CALLBACK void *USER32_RegisterClassA(const void *wndClass)
 {
     LOG_EMULATED();
 
@@ -611,7 +618,7 @@ static __attribute__((stdcall)) void *USER32_RegisterClassA(const void *wndClass
     return (void *)12345;
 }
 
-static __attribute__((stdcall)) void *USER32_CreateWindowExA(
+static API_CALLBACK void *USER32_CreateWindowExA(
     uint32_t UNUSED(exStyle), const char *UNUSED(className), const char *UNUSED(windowName), uint32_t UNUSED(style),
     int UNUSED(x), int UNUSED(y), int UNUSED(width), int UNUSED(height),
     void *UNUSED(hwndParent), void *UNUSED(menu), void *UNUSED(instance), void *UNUSED(pparam))
@@ -621,7 +628,7 @@ static __attribute__((stdcall)) void *USER32_CreateWindowExA(
     return (void *)12346;
 }
 
-static __attribute__((stdcall)) uint32_t USER32_ShowWindow(void *hwnd, uint32_t cmdshow)
+static API_CALLBACK uint32_t USER32_ShowWindow(void *hwnd, uint32_t cmdshow)
 {
     LOG_EMULATED();
 
@@ -630,17 +637,17 @@ static __attribute__((stdcall)) uint32_t USER32_ShowWindow(void *hwnd, uint32_t 
     return 0;
 }
 
-static __attribute__((stdcall)) void USER32_DispatchMessageA(void)
+static API_CALLBACK void USER32_DispatchMessageA(void)
 {
     STUB();
 }
 
-static __attribute__((stdcall)) void USER32_DefWindowProcA(void)
+static API_CALLBACK void USER32_DefWindowProcA(void)
 {
     STUB();
 }
 
-static __attribute__((stdcall)) uint32_t USER32_PeekMessageA(
+static API_CALLBACK uint32_t USER32_PeekMessageA(
       void *UNUSED(msg), void *UNUSED(hWnd),
       uint32_t UNUSED(msgFilterMin), uint32_t UNUSED(msgFilterMax),
       uint32_t UNUSED(removeMsg))
@@ -651,14 +658,14 @@ static __attribute__((stdcall)) uint32_t USER32_PeekMessageA(
     return 0;
 }
 
-static __attribute__((stdcall)) uint32_t USER32_DestroyWindow(void *hwnd)
+static API_CALLBACK uint32_t USER32_DestroyWindow(void *hwnd)
 {
     LOG_EMULATED();
     assert(hwnd == (void *)12346);
     return 1;
 }
 
-static __attribute__((stdcall)) uint32_t USER32_ClientToScreen(void *hwnd, void *point)
+static API_CALLBACK uint32_t USER32_ClientToScreen(void *hwnd, void *point)
 {
     LOG_EMULATED();
 
@@ -668,7 +675,7 @@ static __attribute__((stdcall)) uint32_t USER32_ClientToScreen(void *hwnd, void 
     return 1;
 }
 
-static __attribute__((stdcall)) uint32_t USER32_GetClientRect(void *hwnd, void *rect)
+static API_CALLBACK uint32_t USER32_GetClientRect(void *hwnd, void *rect)
 {
     LOG_EMULATED();
 
@@ -682,7 +689,7 @@ static __attribute__((stdcall)) uint32_t USER32_GetClientRect(void *hwnd, void *
 
 typedef intptr_t (*DialogProc)(void *hdlg, uint32_t msg, uintptr_t wparam, intptr_t lparam);
 
-static __attribute__((stdcall)) uint32_t USER32_DialogBoxIndirectParamA(
+static API_CALLBACK uint32_t USER32_DialogBoxIndirectParamA(
     void *UNUSED(instance), void *UNUSED(dialogTemplate),
     void *UNUSED(hwndParent), DialogProc dialogFunc, void *UNUSED(initParam))
 {
@@ -692,7 +699,7 @@ static __attribute__((stdcall)) uint32_t USER32_DialogBoxIndirectParamA(
     return 1;
 }
 
-static __attribute__((stdcall)) intptr_t USER32_SendDlgItemMessageA(void *UNUSED(hdlg),
+static API_CALLBACK intptr_t USER32_SendDlgItemMessageA(void *UNUSED(hdlg),
     int controlid, uint32_t UNUSED(msg), uintptr_t UNUSED(wparam), intptr_t UNUSED(lparam))
 {
     LOG_EMULATED();
@@ -713,7 +720,7 @@ static __attribute__((stdcall)) intptr_t USER32_SendDlgItemMessageA(void *UNUSED
     assert(0);
 }
 
-static __attribute__((stdcall)) uint32_t USER32_EndDialog(void *UNUSED(hdlg), intptr_t UNUSED(result))
+static API_CALLBACK uint32_t USER32_EndDialog(void *UNUSED(hdlg), intptr_t UNUSED(result))
 {
     LOG_EMULATED();
 
@@ -722,12 +729,12 @@ static __attribute__((stdcall)) uint32_t USER32_EndDialog(void *UNUSED(hdlg), in
 
 // **MISC**
 
-static __attribute__((stdcall)) void USER32_MessageBoxA(void)
+static API_CALLBACK void USER32_MessageBoxA(void)
 {
     STUB();
 }
 
-static __attribute__((stdcall)) uint32_t USER32_OffsetRect(void *rect, int UNUSED(dx), int UNUSED(dy))
+static API_CALLBACK uint32_t USER32_OffsetRect(void *rect, int UNUSED(dx), int UNUSED(dy))
 {
     LOG_EMULATED();
 
@@ -735,7 +742,7 @@ static __attribute__((stdcall)) uint32_t USER32_OffsetRect(void *rect, int UNUSE
     return 1;
 }
 
-static __attribute__((stdcall)) int USER32_GetSystemMetrics(int index)
+static API_CALLBACK int USER32_GetSystemMetrics(int index)
 {
     LOG_EMULATED();
 
@@ -749,7 +756,7 @@ static __attribute__((stdcall)) int USER32_GetSystemMetrics(int index)
         assert(0);
 }
 
-static __attribute__((stdcall)) uint32_t USER32_SystemParametersInfoA(
+static API_CALLBACK uint32_t USER32_SystemParametersInfoA(
     uint32_t action, uint32_t wparam, void *pparam, uint32_t winini)
 {
     LOG_EMULATED();
@@ -763,7 +770,7 @@ static __attribute__((stdcall)) uint32_t USER32_SystemParametersInfoA(
     return 1;
 }
 
-static __attribute__((stdcall)) void *USER32_SetCursor(void *UNUSED(cursor))
+static API_CALLBACK void *USER32_SetCursor(void *UNUSED(cursor))
 {
     LOG_EMULATED();
     return NULL;
@@ -794,7 +801,7 @@ static SymbolTable USER32_SYMBOLS[] = {
 // WINMM
 // -----
 
-static __attribute__((stdcall)) uint32_t WINMM_timeGetTime(void)
+static API_CALLBACK uint32_t WINMM_timeGetTime(void)
 {
     LOG_EMULATED();
 
@@ -825,7 +832,7 @@ typedef struct DDRAW_Surface_Object
     int pitch;
 } DDRAW_Surface_Object;
 
-static __attribute__((stdcall)) uint32_t DDRAW_Surface_Release(void *cominterface)
+static API_CALLBACK uint32_t DDRAW_Surface_Release(void *cominterface)
 {
     LOG_EMULATED();
 
@@ -842,7 +849,7 @@ static __attribute__((stdcall)) uint32_t DDRAW_Surface_Release(void *cominterfac
     return 0;
 }
 
-static __attribute__((stdcall)) void *DDRAW_Surface_Blt(
+static API_CALLBACK void *DDRAW_Surface_Blt(
     void *cominterface, void *UNUSED(rect1), void *UNUSED(surface),
     void *UNUSED(rect2), uint32_t UNUSED(flags), void *UNUSED(bltfx))
 {
@@ -850,7 +857,7 @@ static __attribute__((stdcall)) void *DDRAW_Surface_Blt(
     assert(cominterface != NULL);
     return 0;
 }
-static __attribute__((stdcall)) void *DDRAW_Surface_GetSurfaceDesc(void *cominterface, void *surface_desc)
+static API_CALLBACK void *DDRAW_Surface_GetSurfaceDesc(void *cominterface, void *surface_desc)
 {
     LOG_EMULATED();
 
@@ -868,7 +875,7 @@ static __attribute__((stdcall)) void *DDRAW_Surface_GetSurfaceDesc(void *cominte
 
     return 0;
 }
-static __attribute__((stdcall)) void *DDRAW_Surface_IsLost(void *cominterface)
+static API_CALLBACK void *DDRAW_Surface_IsLost(void *cominterface)
 {
     LOG_EMULATED();
 
@@ -877,7 +884,7 @@ static __attribute__((stdcall)) void *DDRAW_Surface_IsLost(void *cominterface)
     return 0;
 }
 
-static __attribute__((stdcall)) void *DDRAW_Surface_Lock(void *cominterface, void *rect, void *surface_desc, uint32_t flags, void *event)
+static API_CALLBACK void *DDRAW_Surface_Lock(void *cominterface, void *rect, void *surface_desc, uint32_t flags, void *event)
 {
     LOG_EMULATED();
 
@@ -900,11 +907,11 @@ static __attribute__((stdcall)) void *DDRAW_Surface_Lock(void *cominterface, voi
 
     return 0;
 }
-static __attribute__((stdcall)) void DDRAW_Surface_Restore(void)
+static API_CALLBACK void DDRAW_Surface_Restore(void)
 {
     STUB();
 }
-static __attribute__((stdcall)) void *DDRAW_Surface_SetClipper(void *cominterface, void *clipper)
+static API_CALLBACK void *DDRAW_Surface_SetClipper(void *cominterface, void *clipper)
 {
     LOG_EMULATED();
 
@@ -914,7 +921,7 @@ static __attribute__((stdcall)) void *DDRAW_Surface_SetClipper(void *cominterfac
     return 0;
 }
 
-static __attribute__((stdcall)) void *DDRAW_Surface_Unlock(void *cominterface, void *rect)
+static API_CALLBACK void *DDRAW_Surface_Unlock(void *cominterface, void *rect)
 {
     LOG_EMULATED();
 
@@ -963,14 +970,14 @@ static void *DDRAW_Surface_VTABLE[256] = {
     [0x80/4] = DDRAW_Surface_Unlock,
 };
 
-static __attribute__((stdcall)) uint32_t DDRAW_Clipper_Release(void *cominterface)
+static API_CALLBACK uint32_t DDRAW_Clipper_Release(void *cominterface)
 {
     LOG_EMULATED();
 
     assert(cominterface != NULL);
     return 0;
 }
-static __attribute__((stdcall)) void *DDRAW_Clipper_SetHWnd(void *cominterface, uint32_t flags, void *hwnd)
+static API_CALLBACK void *DDRAW_Clipper_SetHWnd(void *cominterface, uint32_t flags, void *hwnd)
 {
     LOG_EMULATED();
 
@@ -991,7 +998,7 @@ static struct DDRAW_Clipper_Object
     void *vtable;
 } DDRAW_Clipper_NULLOBJECT = { DDRAW_Clipper_VTABLE };
 
-static __attribute__((stdcall)) uint32_t DDRAW_Release(void *cominterface)
+static API_CALLBACK uint32_t DDRAW_Release(void *cominterface)
 {
     LOG_EMULATED();
 
@@ -999,7 +1006,7 @@ static __attribute__((stdcall)) uint32_t DDRAW_Release(void *cominterface)
     return 0;
 }
 
-static __attribute__((stdcall)) void *DDRAW_CreateClipper(void *cominterface, uint32_t flags, void **clipper, void *outer)
+static API_CALLBACK void *DDRAW_CreateClipper(void *cominterface, uint32_t flags, void **clipper, void *outer)
 {
     LOG_EMULATED();
 
@@ -1012,7 +1019,7 @@ static __attribute__((stdcall)) void *DDRAW_CreateClipper(void *cominterface, ui
     return 0;
 }
 
-static __attribute__((stdcall)) void *DDRAW_CreateSurface(
+static API_CALLBACK void *DDRAW_CreateSurface(
     void *cominterface, void *surface_desc, void **surface, void *outer)
 {
     assert(cominterface != NULL);
@@ -1060,7 +1067,7 @@ static __attribute__((stdcall)) void *DDRAW_CreateSurface(
     *surface = surfaceobj;
     return 0;
 }
-static __attribute__((stdcall)) void *DDRAW_RestoreDisplayMode(void *cominterface)
+static API_CALLBACK void *DDRAW_RestoreDisplayMode(void *cominterface)
 {
     LOG_EMULATED();
 
@@ -1069,7 +1076,7 @@ static __attribute__((stdcall)) void *DDRAW_RestoreDisplayMode(void *cominterfac
     return 0;
 }
 
-static __attribute__((stdcall)) void *DDRAW_SetCooperativeLevel(
+static API_CALLBACK void *DDRAW_SetCooperativeLevel(
     void *cominterface, void *hwnd, uint32_t UNUSED(flags))
 {
     LOG_EMULATED();
@@ -1080,7 +1087,7 @@ static __attribute__((stdcall)) void *DDRAW_SetCooperativeLevel(
     return 0;
 }
 
-static __attribute__((stdcall)) void *DDRAW_SetDisplayMode(void *cominterface,
+static API_CALLBACK void *DDRAW_SetDisplayMode(void *cominterface,
     uint32_t UNUSED(width), uint32_t UNUSED(height), uint32_t bpp)
 {
     LOG_EMULATED();
@@ -1103,7 +1110,7 @@ static struct DDRAW_Object
     void *vtable;
 } DDRAW_NULLOBJECT = { DDRAW_VTABLE };
 
-static __attribute__((stdcall)) void *DDRAW_DirectDrawCreate(
+static API_CALLBACK void *DDRAW_DirectDrawCreate(
     void *guid, void **lpdd, void *unkouter)
 {
     LOG_EMULATED();
