@@ -485,7 +485,6 @@ static API_CALLBACK char *KERNEL32_GetCommandLineA(void)
     return COMMANDLINE;
 }
 
-
 static API_CALLBACK void *KERNEL32_GetModuleHandleA(const char *moduleName)
 {
     LOG_EMULATED();
@@ -493,7 +492,6 @@ static API_CALLBACK void *KERNEL32_GetModuleHandleA(const char *moduleName)
     assert(moduleName == NULL);
     return (void *)IMAGEBASE;
 }
-
 
 static API_CALLBACK void KERNEL32_ExitProcess(uint32_t exitcode)
 {
@@ -845,6 +843,7 @@ static API_CALLBACK void *DDRAW_Surface_Blt(
     assert(cominterface != NULL);
     return 0;
 }
+
 static API_CALLBACK void *DDRAW_Surface_GetSurfaceDesc(void *cominterface, void *surface_desc)
 {
     LOG_EMULATED();
@@ -863,6 +862,7 @@ static API_CALLBACK void *DDRAW_Surface_GetSurfaceDesc(void *cominterface, void 
 
     return 0;
 }
+
 static API_CALLBACK void *DDRAW_Surface_IsLost(void *cominterface)
 {
     LOG_EMULATED();
@@ -895,10 +895,12 @@ static API_CALLBACK void *DDRAW_Surface_Lock(void *cominterface, void *rect, voi
 
     return 0;
 }
+
 static API_CALLBACK void DDRAW_Surface_Restore(void)
 {
     STUB();
 }
+
 static API_CALLBACK void *DDRAW_Surface_SetClipper(void *cominterface, void *clipper)
 {
     LOG_EMULATED();
@@ -965,6 +967,7 @@ static API_CALLBACK uint32_t DDRAW_Clipper_Release(void *cominterface)
     assert(cominterface != NULL);
     return 0;
 }
+
 static API_CALLBACK void *DDRAW_Clipper_SetHWnd(void *cominterface, uint32_t flags, void *hwnd)
 {
     LOG_EMULATED();
@@ -1055,6 +1058,7 @@ static API_CALLBACK void *DDRAW_CreateSurface(
     *surface = surfaceobj;
     return 0;
 }
+
 static API_CALLBACK void *DDRAW_RestoreDisplayMode(void *cominterface)
 {
     LOG_EMULATED();
