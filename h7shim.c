@@ -15,6 +15,7 @@
 #define ENTRYPOINT 0x42C8A0
 
 #define SETTING_RESOLUTION 3 // 0 = 320x240, 1 = 512x384, 2 = 640x480, 3 = 800x600
+// But actually the values are: 0 = 320x176, 1 = 512x280, 2 = 640x352, 3 = 800x440
 #define SETTING_TRACER 0 // 0 = 1x1, 1 = 2x2, 2 = 4x4
 #define SETTING_SOUND 0 // 0 = 44 Khz, 1 = 22 Khz, 2 = Disabled
 #define SETTING_WINDOWED 0 // 0 or 1
@@ -23,6 +24,7 @@
 
 static bool dump_frames = false;
 static bool dump_audio = true;
+static bool resolution_hack = false;
 #define SPEEDUP_FACTOR 1
 
 #ifdef __GNUC__
@@ -682,6 +684,14 @@ static API_CALLBACK uint32_t USER32_DialogBoxIndirectParamA(
     LOG_EMULATED();
 
     dialogFunc(NULL, 0x111 /* WM_COMMAND */, 1 /* Accept button */, 12345);
+
+    if (resolution_hack) {
+        ushort *resolutionTable = (ushort *)0x410027;
+        SDL_DisplayMode current;
+        SDL_GetCurrentDisplayMode(0, &current);
+        resolutionTable[SETTING_RESOLUTION*2+0] = current.w;
+        resolutionTable[SETTING_RESOLUTION*2+1] = current.h;
+    }
     return 1;
 }
 
