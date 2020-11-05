@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <string.h>
 #include <assert.h>
 #include <limits.h>
 #include <signal.h>
@@ -479,11 +480,27 @@ static API_CALLBACK void KERNEL32_DeleteCriticalSection(void *pcs)
 
 // **MISC**
 
+static char *COMMANDLINE;
+
 static API_CALLBACK char *KERNEL32_GetCommandLineA(void)
 {
     LOG_EMULATED();
+    // Arguments:
+    // (Default: 44Khz sound)
+    // n -> No sound
+    // s -> 22Khz sound
 
-    static char *COMMANDLINE = "C:\\HEAVEN7W.EXE";
+    // (Default: 1x1 tracer)
+    // a -> 4x4 tracer
+    // b -> 2x2 tracer
+
+    // (Default: Fullscreen, lowest resolution)
+    // w -> Windowed
+    // 0123 -> Resolution (higher = better)
+    // d -> Double resolution
+
+    // l -> Looping
+    // t -> No text
     return COMMANDLINE;
 }
 
@@ -1140,9 +1157,65 @@ static LibraryTable GLOBAL_LIBRARY_TABLE_TMP[] = {
 
 static LibraryTable *GLOBAL_LIBRARY_TABLE = GLOBAL_LIBRARY_TABLE_TMP;
 
+static int is_simple_command(const char *s) {
+    for (size_t i = 0; i < strlen(s); i++)
+        // List of characters from python's shlex.quote
+        if (!strchr("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_@%+=:,./-", s[i]))
+            return false;
+    return true;
+}
+
+// Converts a argc / argv pair to a single command line string,
+// quoting arguments and escaping characters if necessary
+// e.g. argv = ['./h7shim', 'w', 'the game', 'the ga"\me']
+// -> './h7shim w "the game" "the ga\"\\me"'
+// NOTE: This function is not bulletproof (e.g. UTF-8 support, )
+static char *ArgvToCommandLine(int argc, char *argv[]) {
+    size_t maxlen = 1;
+    for (int argi = 0; argi < argc; argi++)
+        maxlen += strlen(argv[argi]) * 2 + 3;
+
+    char *command_line = malloc(maxlen);
+    if (command_line == NULL)
+        return NULL;
+
+    char *cmdp = command_line;
+    for (int argi = 0; argi < argc; argi++) {
+        if (is_simple_command(argv[argi])) {
+            strcpy(cmdp, argv[argi]);
+            cmdp += strlen(argv[argi]);
+        } else {
+            *cmdp++ = '"';
+            for (size_t i = 0; i < strlen(argv[argi]); i++) {
+                if (argv[argi][i] == '"' || argv[argi][i] == '\\')
+                    *cmdp++ = '\\';
+                *cmdp++ = argv[argi][i];
+            }
+            *cmdp++ = '"';
+        }
+
+        if (argi != argc - 1)
+            *cmdp++ = ' ';
+    }
+    *cmdp = '\0';
+    return command_line;
+}
+
+static void free_command_line(void) {
+    return free(COMMANDLINE);
+}
+
 typedef void (*entrypoint_t)(void);
 
-int main(void) {
+int main(int argc, char *argv[]) {
+    COMMANDLINE = ArgvToCommandLine(argc, argv);
+    if (COMMANDLINE == NULL) {
+        fprintf(stderr, "WARNING: Failed to process command line, using fallback.\n");
+        COMMANDLINE = "C:\\HEAVEN7W.EXE";
+    } else {
+        atexit(free_command_line);
+    }
+
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0)
             return EXIT_FAILURE;
 
