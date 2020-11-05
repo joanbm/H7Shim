@@ -783,9 +783,10 @@ static API_CALLBACK uint32_t USER32_SystemParametersInfoA(
     return 1;
 }
 
-static API_CALLBACK void *USER32_SetCursor(void *UNUSED(cursor))
+static API_CALLBACK void *USER32_SetCursor(void *cursor)
 {
     LOG_EMULATED();
+    SDL_ShowCursor(cursor != NULL ? SDL_ENABLE : SDL_DISABLE);
     return NULL;
 }
 
