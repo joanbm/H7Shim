@@ -26,6 +26,7 @@
 static bool dump_frames = false;
 static bool dump_audio = true;
 static bool resolution_hack = false;
+static bool valgrind_hack = false;
 #define SPEEDUP_FACTOR 1
 
 #ifdef __GNUC__
@@ -1249,18 +1250,23 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "ERROR: Failed to change HEAVEN7 executable memory protection.\n");
     }
 
-
-#if 1
-    ((entrypoint_t)ENTRYPOINT)();
-#else
-    static uint32_t JUMP_TO_OEP_ADDR = 0x2C9F8;
-    uint8_t oldi = *(image + JUMP_TO_OEP_ADDR);
-    *(image + JUMP_TO_OEP_ADDR) = 0xC3; // RET on jump to OEP
-    ((entrypoint_t)ENTRYPOINT)();
-    *(image + JUMP_TO_OEP_ADDR) = oldi;
-    printf("--BREAK AFTER UNPACK--\n");
-    ((entrypoint_t)(IMAGEBASE+JUMP_TO_OEP_ADDR))();
-#endif
+    if (!valgrind_hack) {
+        ((entrypoint_t)ENTRYPOINT)();
+    } else {
+        // Let UPX unpack the main program and return back to main
+        static uint32_t JUMP_TO_OEP_ADDR = 0x2C9F8;
+        uint8_t oldi = *(image + JUMP_TO_OEP_ADDR);
+        *(image + JUMP_TO_OEP_ADDR) = 0xC3; // RET on jump to OEP
+        ((entrypoint_t)ENTRYPOINT)();
+        *(image + JUMP_TO_OEP_ADDR) = oldi;
+        // Valgrind does not recognize the following weird instruction in HEAVEN7W:
+        // 0x0040B804: 2E 8B2D 00A44200 MOV EBP,DWORD PTR CS:[42A400]
+        // The problem seems to be that Valgrind does not support the CS segment prefix (2E)
+        // Patching it out seems harmless and allows it to run the rest of the program
+        *(char *)0x40B804 = 0x90; // NOP
+        // Jump back to the main program
+        ((entrypoint_t)(IMAGEBASE+JUMP_TO_OEP_ADDR))();
+    }
 
     return EXIT_SUCCESS;
 }
