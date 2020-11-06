@@ -1204,7 +1204,7 @@ static char *ArgvToCommandLine(int argc, char *argv[]) {
 }
 
 static void free_command_line(void) {
-    return free(COMMANDLINE);
+    free(COMMANDLINE);
 }
 
 typedef void (*entrypoint_t)(void);
@@ -1220,6 +1220,7 @@ int main(int argc, char *argv[]) {
 
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0)
             return EXIT_FAILURE;
+    atexit(SDL_Quit);
 
     uint8_t *image = mmap((void *)IMAGEBASE, IMAGESIZE, PROT_WRITE,
                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
@@ -1238,8 +1239,10 @@ int main(int argc, char *argv[]) {
     size_t r3 = fread(image+0x2D000, 1, 0x200, h7exe);
     if (r1+r2+r3 != 0x10000) {
         fprintf(stderr, "ERROR: Failed to read HEAVEN7 executable image.\n");
+        fclose(h7exe);
         return EXIT_FAILURE;
     }
+    fclose(h7exe);
 
     // Set up symbols used by the unpacker to find the rest of the symbols
     *((void **)(image + 0x2D078)) = KERNEL32_LoadLibraryA;
