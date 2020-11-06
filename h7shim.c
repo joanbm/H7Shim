@@ -338,7 +338,7 @@ static API_CALLBACK void *DSOUND_SetCooperativeLevel(
     LOG_EMULATED();
 
     assert(cominterface != NULL);
-    assert(hwnd == (void *)12346);
+    assert(hwnd != NULL);
 
     return 0;
 }
@@ -631,15 +631,24 @@ static API_CALLBACK void *USER32_CreateWindowExA(
 {
     LOG_EMULATED();
 
-    return (void *)12346;
+    SDL_Window *window = SDL_CreateWindow("HEAVEN7",
+                                          SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+                                          123, 123, 0); // Actual size will be set later
+    if (window == NULL) {
+        fprintf(stderr, "Couldn't open SDL window: %s\n", SDL_GetError());
+        exit(EXIT_FAILURE);
+    }
+
+    return window;
 }
 
 static API_CALLBACK uint32_t USER32_ShowWindow(void *hwnd, uint32_t cmdshow)
 {
     LOG_EMULATED();
 
-    assert(hwnd == (void *)12346);
+    assert(hwnd != NULL);
     assert(cmdshow == 1);
+
     return 0;
 }
 
@@ -667,7 +676,7 @@ static API_CALLBACK uint32_t USER32_PeekMessageA(
 static API_CALLBACK uint32_t USER32_DestroyWindow(void *hwnd)
 {
     LOG_EMULATED();
-    assert(hwnd == (void *)12346);
+    SDL_DestroyWindow((SDL_Window *)hwnd);
     return 1;
 }
 
@@ -675,7 +684,7 @@ static API_CALLBACK uint32_t USER32_ClientToScreen(void *hwnd, void *point)
 {
     LOG_EMULATED();
 
-    assert(hwnd == (void *)12346);
+    assert(hwnd != NULL);
     assert(point != NULL);
 
     return 1;
@@ -685,7 +694,7 @@ static API_CALLBACK uint32_t USER32_GetClientRect(void *hwnd, void *rect)
 {
     LOG_EMULATED();
 
-    assert(hwnd == (void *)12346);
+    assert(hwnd != NULL);
     assert(rect != NULL);
 
     return 1;
@@ -839,7 +848,6 @@ typedef struct DDRAW_Surface_Object
     bool is_primary;
     int width;
     int height;
-    SDL_Window *window;
     SDL_Renderer *renderer;
     SDL_Texture *texture;
 
@@ -857,7 +865,6 @@ static API_CALLBACK uint32_t DDRAW_Surface_Release(void *cominterface)
     if (!surfaceobj->is_primary) {
         SDL_DestroyTexture(surfaceobj->texture);
         SDL_DestroyRenderer(surfaceobj->renderer);
-        SDL_DestroyWindow(surfaceobj->window);
     }
     free(surfaceobj);
 
@@ -1003,7 +1010,7 @@ static API_CALLBACK void *DDRAW_Clipper_SetHWnd(void *cominterface, uint32_t fla
 
     assert(cominterface != NULL);
     assert(flags == 0);
-    assert(hwnd == (void *)12346);
+    assert(hwnd != NULL);
 
     return 0;
 }
@@ -1018,11 +1025,18 @@ static struct DDRAW_Clipper_Object
     void *vtable;
 } DDRAW_Clipper_NULLOBJECT = { DDRAW_Clipper_VTABLE };
 
+typedef struct DDRAW_Object
+{
+    void *vtable;
+    SDL_Window *window;
+} DDRAW_Object;
+
 static API_CALLBACK uint32_t DDRAW_Release(void *cominterface)
 {
     LOG_EMULATED();
 
     assert(cominterface != NULL);
+    free((DDRAW_Object *)cominterface);
     return 0;
 }
 
@@ -1047,6 +1061,9 @@ static API_CALLBACK void *DDRAW_CreateSurface(
     assert(surface != NULL);
     assert(outer == NULL);
 
+    DDRAW_Object *ddraw = (DDRAW_Object *)cominterface;
+    assert(ddraw->window != NULL);
+
     bool is_primary_surface = *(uint32_t *)((uint8_t *)surface_desc + 104) & 0x200; // DDSCAPS_PRIMARYSURFACE
     uint32_t raw_height = *(uint32_t *)((uint8_t *)surface_desc + 8);
     uint32_t raw_width = *(uint32_t *)((uint8_t *)surface_desc + 12);
@@ -1058,18 +1075,18 @@ static API_CALLBACK void *DDRAW_CreateSurface(
     surfaceobj->is_primary = is_primary_surface;
     surfaceobj->width = !is_primary_surface ? width : 0;
     surfaceobj->height = !is_primary_surface ? height : 0;
-    surfaceobj->window = NULL;
     surfaceobj->renderer = NULL;
     surfaceobj->texture = NULL;
     surfaceobj->pixbuf = NULL;
 
     if (!is_primary_surface) {
-        int r = SDL_CreateWindowAndRenderer(width, height, 0, &surfaceobj->window, &surfaceobj->renderer);
-        if (r == -1) {
-            fprintf(stderr, "Couldn't open SDL window and renderer: %s\n", SDL_GetError());
+        SDL_SetWindowSize(ddraw->window, width, height);
+
+        surfaceobj->renderer = SDL_CreateRenderer(ddraw->window, -1, 0);
+        if (surfaceobj->renderer == NULL) {
+            fprintf(stderr, "Couldn't open SDL renderer: %s\n", SDL_GetError());
             exit(EXIT_FAILURE);
         }
-        SDL_SetWindowTitle(surfaceobj->window, "HEAVEN7");
 
         surfaceobj->texture = SDL_CreateTexture(surfaceobj->renderer, SDL_PIXELFORMAT_ARGB8888,
                                                 SDL_TEXTUREACCESS_STREAMING, width, height);
@@ -1093,12 +1110,20 @@ static API_CALLBACK void *DDRAW_RestoreDisplayMode(void *cominterface)
 }
 
 static API_CALLBACK void *DDRAW_SetCooperativeLevel(
-    void *cominterface, void *hwnd, uint32_t UNUSED(flags))
+    void *cominterface, void *hwnd, uint32_t flags)
 {
     LOG_EMULATED();
 
     assert(cominterface != NULL);
-    assert(hwnd == (void *)12346);
+    assert(hwnd != NULL);
+
+    DDRAW_Object *ddraw = (DDRAW_Object *)cominterface;
+    assert(ddraw->window == NULL);
+    ddraw->window = (SDL_Window *)hwnd;
+
+    if (flags & 0x11 /* DDSCL_FULLSCREEN | DDSCL_EXCLUSIVE */) {
+        SDL_SetWindowFullscreen(ddraw->window, SDL_WINDOW_FULLSCREEN_DESKTOP);
+    }
 
     return 0;
 }
@@ -1121,11 +1146,6 @@ static void *DDRAW_VTABLE[256] = {
     [0x54/4] = DDRAW_SetDisplayMode,
 };
 
-static struct DDRAW_Object
-{
-    void *vtable;
-} DDRAW_NULLOBJECT = { DDRAW_VTABLE };
-
 static API_CALLBACK void *DDRAW_DirectDrawCreate(
     void *guid, void **lpdd, void *unkouter)
 {
@@ -1135,7 +1155,10 @@ static API_CALLBACK void *DDRAW_DirectDrawCreate(
     assert(lpdd != NULL);
     assert(unkouter == NULL);
 
-    *lpdd = &DDRAW_NULLOBJECT;
+    DDRAW_Object *ddraw = malloc(sizeof(DDRAW_Object));
+    ddraw->vtable = DDRAW_VTABLE;
+    ddraw->window = NULL;
+    *lpdd = ddraw;
     return 0;
 }
 
