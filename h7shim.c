@@ -23,13 +23,9 @@
 #define SETTING_NOTEXT 0 // 0 or 1
 #define SETTING_LOOP 0 // 0 or 1
 
-static bool dump_frames = false;
-static bool dump_audio = true;
 static bool resolution_hack = false;
 static bool valgrind_hack = false;
 #define SPEEDUP_FACTOR 1
-
-static uint32_t frame_counter = 0;
 
 #ifdef __GNUC__
 #define UNUSED(x) UNUSED_ ## x __attribute__((__unused__))
@@ -66,19 +62,6 @@ typedef struct LibraryTable
 
 static LibraryTable *GLOBAL_LIBRARY_TABLE;
 
-// Creates a BMP file containing a visual representation of the given cellular automaton state
-static bool write_bmp(int width, int height, int pitch, void *pixbuf, const char *output_file_path)
-{
-    SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormatFrom(
-        pixbuf, width, height, 32, pitch, SDL_PIXELFORMAT_RGB888);
-    if (surface == NULL)
-        return false;
-
-    bool ret = SDL_SaveBMP(surface, output_file_path) == 0;
-    SDL_FreeSurface(surface);
-    return ret;
-}
-
 // ------
 // DSOUND
 // ------
@@ -92,8 +75,6 @@ typedef struct DSound_SoundBufferImpl_Object
     uint32_t audio_buffer_size;
     bool audio_playing;
     uint32_t audio_playpos;
-
-    FILE *dumpfile;
 } DSound_SoundBufferImpl_Object;
 
 static API_CALLBACK void *DSOUND_SoundBufferImpl_GetStatus(void *cominterface, uint32_t *status)
@@ -148,20 +129,12 @@ static API_CALLBACK void *DSOUND_SoundBufferImpl_Lock(
 }
 
 static API_CALLBACK void *DSOUND_SoundBufferImpl_Unlock(
-    void *cominterface, void *pvAudioPtr1, uint32_t dwAudioBytes1,
+    void *cominterface, void *UNUSED(pvAudioPtr1), uint32_t UNUSED(dwAudioBytes1),
     void *UNUSED(pvAudioPtr2), uint32_t UNUSED(dwAudioBytes2))
 {
     LOG_EMULATED();
     assert(cominterface != NULL);
     SDL_UnlockAudio();
-    DSound_SoundBufferImpl_Object *bufferobj = (DSound_SoundBufferImpl_Object *)cominterface;
-
-    if (bufferobj->dumpfile) {
-        if (fwrite(pvAudioPtr1, 1, dwAudioBytes1, bufferobj->dumpfile) != dwAudioBytes1) {
-            fprintf(stderr, "WARNING: Could not write to dump audio file, result may be incomplete.\n");
-
-        }
-    }
 
     return NULL;
 }
@@ -234,9 +207,6 @@ static API_CALLBACK void *DSOUND_SoundBufferImpl_Release(void *cominterface)
     DSound_SoundBufferImpl_Object *bufferobj = (DSound_SoundBufferImpl_Object *)cominterface;
     if (!bufferobj->is_primary) {
         SDL_CloseAudio();
-
-        if (bufferobj->dumpfile)
-            fclose(bufferobj->dumpfile);
     }
     free(bufferobj->audio_buffer);
     free(bufferobj);
@@ -304,7 +274,6 @@ static API_CALLBACK void *DSOUND_CreateSoundBuffer(
     bufferobj->audio_buffer_size = !is_primary_buffer ? buffer_size : 0;
     bufferobj->audio_playing = false;
     bufferobj->audio_playpos = 0;
-    bufferobj->dumpfile = NULL;
 
     if (!bufferobj->is_primary) {
         SDL_AudioSpec wav_spec;
@@ -321,14 +290,6 @@ static API_CALLBACK void *DSOUND_CreateSoundBuffer(
         if (SDL_OpenAudio(&wav_spec, NULL) < 0) {
             fprintf(stderr, "Couldn't open SDL audio: %s\n", SDL_GetError());
             exit(EXIT_FAILURE);
-        }
-
-        if (dump_audio) {
-            bufferobj->dumpfile = fopen("/tmp/h7audio.raw", "wb");
-            if (bufferobj->dumpfile == NULL) {
-                fprintf(stderr, "WARNING: Couldn't open audio dump file\n");
-                exit(EXIT_FAILURE);
-            }
         }
     }
 
@@ -1029,15 +990,6 @@ static API_CALLBACK void *DDRAW_Surface_Unlock(void *cominterface, void *rect)
     DDRAW_Surface_Object *surfaceobj = (DDRAW_Surface_Object *)cominterface;
     assert(!surfaceobj->is_primary);
     assert(surfaceobj->pixbuf != NULL);
-
-    if (dump_frames) {
-        char bmp_name[100];
-        sprintf(bmp_name, "/tmp/h7screen_%06u.bmp", frame_counter);
-        if (!write_bmp(surfaceobj->width, surfaceobj->height, surfaceobj->pitch, surfaceobj->pixbuf, bmp_name)) {
-            fprintf(stderr, "WARNING: Could not write to dump bitmap file, result may be incomplete.\n");
-        }
-        frame_counter++;
-    }
 
     SDL_UnlockTexture(surfaceobj->texture);
     surfaceobj->pixbuf = NULL;
