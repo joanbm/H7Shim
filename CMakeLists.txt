@@ -9,5 +9,5 @@ find_package(SDL2 REQUIRED)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
-add_executable(h7shim h7shim.c)
+add_executable(h7shim h7shim.c winapi2sdl.c)
 target_link_libraries(h7shim PRIVATE Threads::Threads SDL2::SDL2)

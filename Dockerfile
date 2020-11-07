@@ -34,6 +34,6 @@ WORKDIR /h7shim/
 COPY  --chown=builduser:root ./download_HEAVEN7W.sh ./
 RUN ./download_HEAVEN7W.sh
 
-COPY CMakeLists.txt h7shim.c ./
+COPY CMakeLists.txt winapi2sdl.c winapi2sdl.h h7shim.c ./
 RUN mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release .. && make
 CMD /h7shim/build/h7shim
