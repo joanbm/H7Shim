@@ -3,14 +3,119 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
+#include <inttypes.h>
 #include <sys/mman.h>
 #include "winapi2sdl.h"
 
+// ---------------
+// HOOKING LIBRARY
+// ---------------
+typedef struct __attribute__((packed)) RegSet
+{
+    uintptr_t EDI;
+    uintptr_t ESI;
+    uintptr_t EBP;
+    uintptr_t EBX;
+    uintptr_t EDX;
+    uintptr_t ECX;
+    uintptr_t EAX;
+    uintptr_t ESP;
+} RegSet;
+
+static void dump_regset(const RegSet *regs)
+{
+    printf("ESP: %" PRIxPTR "\n", regs->ESP);
+    printf("EAX: %" PRIxPTR "\n", regs->EAX);
+    printf("ECX: %" PRIxPTR "\n", regs->ECX);
+    printf("EDX: %" PRIxPTR "\n", regs->EDX);
+    printf("EBX: %" PRIxPTR "\n", regs->EBX);
+    printf("EBP: %" PRIxPTR "\n", regs->EBP);
+    printf("ESI: %" PRIxPTR "\n", regs->ESI);
+    printf("EDI: %" PRIxPTR "\n", regs->EDI);
+}
+
+static void hook(void *origin, void *destination) {
+    uint8_t *trampoline = mmap(NULL, 128, PROT_READ | PROT_WRITE | PROT_EXEC,
+        MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    uint8_t *trampolinep = trampoline;
+    *trampolinep++ = 0x54; // PUSH ESP
+    *trampolinep++ = 0x50; // PUSH EAX
+    *trampolinep++ = 0x51; // PUSH ECX
+    *trampolinep++ = 0x52; // PUSH EDX
+    *trampolinep++ = 0x53; // PUSH EBX
+    *trampolinep++ = 0x55; // PUSH EBP
+    *trampolinep++ = 0x56; // PUSH ESI
+    *trampolinep++ = 0x57; // PUSH EDI
+    *trampolinep++ = 0xB8; // MOV EAX, ...
+    for (size_t i = 0; i < 4; i++)
+        *trampolinep++ = (uintptr_t)destination >> (i * 8);
+    *trampolinep++ = 0xFF; // CALL EAX
+    *trampolinep++ = 0xD0;
+    *trampolinep++ = 0x5F; // POP EDI
+    *trampolinep++ = 0x5E; // POP ESI
+    *trampolinep++ = 0x5D; // POP EBP
+    *trampolinep++ = 0x5B; // POP EBX
+    *trampolinep++ = 0x5A; // POP EDX
+    *trampolinep++ = 0x59; // POP ECX
+    *trampolinep++ = 0x58; // POP EAX
+    *trampolinep++ = 0x5C; // POP ESP
+    *trampolinep++ = 0xC3; // RETN
+
+    uint8_t *originp = (uint8_t *)origin;
+    *originp++ = 0x68; // PUSH
+    for (size_t i = 0; i < 4; i++)
+        *originp++ = (uintptr_t)trampoline >> (i * 8);
+    *originp++ = 0xC3; // RETN
+}
+
+#define HOOK_CALLBACK __attribute__((cdecl))
+
+#define CLOBBER_ALL "edi", "esi", "ebp", "ebx", "edx", "ecx", "eax", "memory"
+
+// -----
+// HOOKS
+// -----
+static HOOK_CALLBACK void Main_40168C(RegSet regs) {
+    const char *cmdp = KERNEL32_GetCommandLineA();
+    if (*cmdp == '"') {
+        // Quoted string -> Advance until quotes closed
+        cmdp++;
+        while (*cmdp != '\0' && *cmdp != '"')
+            cmdp++;
+        if (*cmdp == '"')
+            cmdp++;
+    } else {
+        // Unquoted string -> Advance until whitespace
+        while (*cmdp != '\0' && *cmdp > ' ')
+            cmdp++;
+    }
+    // Advance whitespace after first argument
+    while (*cmdp != '\0' && *cmdp <= ' ')
+        cmdp++;
+
+    // Call into entry
+    asm ("movl %0, %%eax\n\t"
+         "movl $0x401131, %%esi\n\t"
+         "call %%esi\n\t"
+         : : "g"(cmdp) : CLOBBER_ALL);
+
+    // This is buggy in HEAVEN7W and calls ExitProcess(return address of entrypoint),
+    // which is basically a "random" value, so just return whatever we want here
+    KERNEL32_ExitProcess(0x12345678);
+}
+
+// --------
+// LAUNCHER
+// --------
 #define IMAGEBASE 0x400000
 #define IMAGESIZE 0x2E000
 #define ENTRYPOINT 0x42C8A0
 
-static const bool valgrind_hack = false;
+static const enum ExecMode {
+    ExecMode_Shim,
+    ExecMode_UnpackAndValgrindHack,
+    ExecMode_UnpackAndHook
+} ExecMode = ExecMode_UnpackAndHook;
 
 typedef void (*entrypoint_t)(void);
 
@@ -50,7 +155,7 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "ERROR: Failed to change HEAVEN7 executable memory protection.\n");
     }
 
-    if (!valgrind_hack) {
+    if (ExecMode == ExecMode_Shim) {
         ((entrypoint_t)ENTRYPOINT)();
     } else {
         // Let UPX unpack the main program and return back to main
@@ -59,11 +164,18 @@ int main(int argc, char *argv[]) {
         *(image + JUMP_TO_OEP_ADDR) = 0xC3; // RET on jump to OEP
         ((entrypoint_t)ENTRYPOINT)();
         *(image + JUMP_TO_OEP_ADDR) = oldi;
-        // Valgrind does not recognize the following weird instruction in HEAVEN7W:
-        // 0x0040B804: 2E 8B2D 00A44200 MOV EBP,DWORD PTR CS:[42A400]
-        // The problem seems to be that Valgrind does not support the CS segment prefix (2E)
-        // Patching it out seems harmless and allows it to run the rest of the program
-        *(char *)0x40B804 = 0x90; // NOP
+
+        if (ExecMode == ExecMode_UnpackAndValgrindHack)
+        {
+            // Valgrind does not recognize the following weird instruction in HEAVEN7W:
+            // 0x0040B804: 2E 8B2D 00A44200 MOV EBP,DWORD PTR CS:[42A400]
+            // The problem seems to be that Valgrind does not support the CS segment prefix (2E)
+            // Patching it out seems harmless and allows it to run the rest of the program
+            *(uint8_t *)0x40B804 = 0x90; // NOP
+        } else if (ExecMode == ExecMode_UnpackAndHook) {
+            hook((void *)0x40168C, Main_40168C);
+        }
+
         // Jump back to the main program
         ((entrypoint_t)(IMAGEBASE+JUMP_TO_OEP_ADDR))();
     }
