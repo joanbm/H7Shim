@@ -615,22 +615,50 @@ static SymbolTable KERNEL32_SYMBOLS[] = {
 
 // **WINDOW**
 
+typedef intptr_t (*WindowProc)(void *hwnd, uint32_t msg, uintptr_t wparam, intptr_t lparam);
+
+typedef struct USER32_WindowClassObject
+{
+    WindowProc windowProc;
+    const char *name;
+    struct USER32_WindowClassObject *next;
+} USER32_WindowClassObject;
+
+static USER32_WindowClassObject *WINDOWCLASS_HEAD = NULL;
+static char *WINDOWDATA_WINDOWPROC = "WindowProc";
+
 static API_CALLBACK void *USER32_RegisterClassA(const void *wndClass)
 {
     LOG_EMULATED();
 
     assert(wndClass != NULL);
 
-    return (void *)12345;
+    WindowProc windowProc = *(const WindowProc *)((const char *)wndClass + 4);
+    const char *className = *(const char **)((const char *)wndClass + 36);
+
+    USER32_WindowClassObject *classobj = malloc(sizeof(USER32_WindowClassObject));
+    classobj->windowProc = windowProc;
+    classobj->name = className;
+    classobj->next = WINDOWCLASS_HEAD;
+    WINDOWCLASS_HEAD = classobj;
+
+    return (void *)classobj; // Doesn't really matter
 }
 
 static API_CALLBACK void *USER32_CreateWindowExA(
-    uint32_t UNUSED(exStyle), const char *UNUSED(className), const char *UNUSED(windowName), uint32_t UNUSED(style),
+    uint32_t UNUSED(exStyle), const char *className, const char *UNUSED(windowName), uint32_t UNUSED(style),
     int UNUSED(x), int UNUSED(y), int UNUSED(width), int UNUSED(height),
     void *UNUSED(hwndParent), void *UNUSED(menu), void *UNUSED(instance), void *UNUSED(pparam))
 {
     LOG_EMULATED();
 
+    // Find class
+    USER32_WindowClassObject *class = WINDOWCLASS_HEAD;
+    while (class != NULL && strcmp(className, class->name) != 0)
+        class = class->next;
+    assert(class != NULL);
+
+    // Create window and associate windowproc for later calling
     SDL_Window *window = SDL_CreateWindow("HEAVEN7",
                                           SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
                                           123, 123, 0); // Actual size will be set later
@@ -638,6 +666,10 @@ static API_CALLBACK void *USER32_CreateWindowExA(
         fprintf(stderr, "Couldn't open SDL window: %s\n", SDL_GetError());
         exit(EXIT_FAILURE);
     }
+    SDL_SetWindowData(window, WINDOWDATA_WINDOWPROC, class->windowProc);
+
+    // Generate window creation event
+    class->windowProc((void *)window, 1 /* WM_CREATE */, 0, 0);
 
     return window;
 }
@@ -652,30 +684,59 @@ static API_CALLBACK uint32_t USER32_ShowWindow(void *hwnd, uint32_t cmdshow)
     return 0;
 }
 
-static API_CALLBACK void USER32_DispatchMessageA(void)
+static API_CALLBACK void USER32_DefWindowProcA(void *UNUSED(hwnd), uint32_t UNUSED(msg),
+    uintptr_t UNUSED(wparam), intptr_t UNUSED(lparam))
 {
-    STUB();
-}
-
-static API_CALLBACK void USER32_DefWindowProcA(void)
-{
-    STUB();
+    LOG_EMULATED();
 }
 
 static API_CALLBACK uint32_t USER32_PeekMessageA(
-      void *UNUSED(msg), void *UNUSED(hWnd),
+      void *msg, void *UNUSED(hWnd),
       uint32_t UNUSED(msgFilterMin), uint32_t UNUSED(msgFilterMax),
       uint32_t UNUSED(removeMsg))
 {
     LOG_EMULATED();
-    // I think that just never returning any message should work,
-    // the windowproc does basically nothing I think
+
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+        if (event.type == SDL_WINDOWEVENT) {
+            // We really only need to send WM_DESTROY window messages here...
+            // But we also send any other messge as WM_PAINT so we can keep
+            // wndProc busy and receive calls to DefWindowProcA later
+            uint32_t message = event.window.event == SDL_WINDOWEVENT_CLOSE
+                ? 2 /* WM_DESTROY */ : 15 /* WM_PAINT */;
+
+            SDL_Window *window = SDL_GetWindowFromID(event.window.windowID);
+            *(void **)((char *)msg + 0) = window;
+            *(uint32_t *)((char *)msg + 4) = message;
+            *(uintptr_t *)((char *)msg + 8) = 0;
+            *(intptr_t *)((char *)msg + 12) = 0;
+            return 1;
+        }
+    }
+
     return 0;
+}
+
+static API_CALLBACK void USER32_DispatchMessageA(const void *msg)
+{
+    LOG_EMULATED();
+
+    SDL_Window *window = (SDL_Window *)*(const void **)((const char *)msg + 0);
+    uint32_t message = *(const uint32_t *)((const char *)msg + 4);
+    uintptr_t wparam = *(const uintptr_t *)((const char *)msg + 8);
+    intptr_t lparam = *(const intptr_t *)((const char *)msg + 12);
+
+    WindowProc windowProc = (WindowProc)SDL_GetWindowData(window, WINDOWDATA_WINDOWPROC);
+    windowProc(window, message, wparam, lparam);
 }
 
 static API_CALLBACK uint32_t USER32_DestroyWindow(void *hwnd)
 {
     LOG_EMULATED();
+
+    assert(hwnd != NULL);
+
     SDL_DestroyWindow((SDL_Window *)hwnd);
     return 1;
 }
@@ -973,14 +1034,6 @@ static API_CALLBACK void *DDRAW_Surface_Unlock(void *cominterface, void *rect)
     SDL_RenderClear(surfaceobj->renderer);
     SDL_RenderCopy(surfaceobj->renderer, surfaceobj->texture, NULL, NULL);
     SDL_RenderPresent(surfaceobj->renderer);
-
-    SDL_Event event;
-    while (SDL_PollEvent(&event)) {
-        if (event.type == SDL_QUIT) {
-            // TODO: Ideally should not just exit the process but rather notify the H7 main loop
-            exit(EXIT_SUCCESS);
-        }
-    }
 
     return  0;
 }
