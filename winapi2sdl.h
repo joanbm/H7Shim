@@ -3,6 +3,12 @@
 
 #include <stdbool.h>
 
+#ifdef __GNUC__
+#define UNUSED(x) UNUSED_ ## x __attribute__((__unused__))
+#else
+#define UNUSED(x) UNUSED_ ## x
+#endif
+
 // This attribute needs to be applied to all calls from HEAVEN7 application code back to our code
 // It sets stdcall because this is the calling convention used for Win32 APIs,
 // and force_align_arg_pointer because if some libraries (SDL mostly) uses SSE code,
@@ -10,6 +16,8 @@
 // or the SSE instructions will cause a crash due to an unaligned load/store
 #define API_CALLBACK __attribute__((stdcall)) __attribute__((force_align_arg_pointer))
 
+#define DSBSTATUS_PLAYING 0x1
+#define DSBSTATUS_LOOPING 0x4
 API_CALLBACK void *DSOUND_SoundBufferImpl_GetStatus(void *cominterface, uint32_t *status);
 API_CALLBACK void *DSOUND_SoundBufferImpl_Restore(void *cominterface);
 API_CALLBACK void *DSOUND_SoundBufferImpl_Lock(
@@ -60,6 +68,25 @@ API_CALLBACK void *KERNEL32_LoadLibraryA(const char *libraryName);
 API_CALLBACK void *KERNEL32_GetProcAddress(void *module, const char *procName);
 
 typedef intptr_t (*DialogProc)(void *hdlg, uint32_t msg, uintptr_t wparam, intptr_t lparam);
+typedef struct MSG
+{
+    void *hwnd;
+    uint32_t message;
+    uintptr_t wParam;
+    intptr_t lParam;
+} MSG;
+#define PM_REMOVE 1
+#define WM_CREATE 0x1
+#define WM_DESTROY 0x2
+#define WM_PAINT 0xf
+#define WM_QUIT 0x12
+#define WM_KEYDOWN 0x100
+#define WM_SYSKEYDOWN 0x104
+#define WM_COMMAND 0x111
+#define SM_CXSCREEN 0
+#define SM_CYSCREEN 1
+#define SM_CYSCAPTION 4
+#define SPI_GETBORDER 5
 API_CALLBACK void *USER32_RegisterClassA(const void *wndClass);
 API_CALLBACK void *USER32_CreateWindowExA(
     uint32_t exStyle, const char *className, const char *windowName, uint32_t style,
@@ -91,6 +118,9 @@ API_CALLBACK void *USER32_SetCursor(void *cursor);
 
 API_CALLBACK uint32_t WINMM_timeGetTime(void);
 
+#define DDSCL_FULLSCREEN 0x1
+#define DDSCL_EXCLUSIVE 0x10
+#define DDSCAPS_PRIMARYSURFACE 0x200
 API_CALLBACK uint32_t DDRAW_Surface_Release(void *cominterface);
 API_CALLBACK void *DDRAW_Surface_Blt(
     void *cominterface, void *rect1, void *surface,

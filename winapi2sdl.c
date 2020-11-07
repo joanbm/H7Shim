@@ -20,12 +20,6 @@
 static const bool resolution_hack = false;
 #define SPEEDUP_FACTOR 1
 
-#ifdef __GNUC__
-#define UNUSED(x) UNUSED_ ## x __attribute__((__unused__))
-#else
-#define UNUSED(x) UNUSED_ ## x
-#endif
-
 #if 0
 #define LOG_EMULATED() printf("[!] %s EMULATED!\n", __func__)
 #else
@@ -70,7 +64,7 @@ API_CALLBACK void *DSOUND_SoundBufferImpl_GetStatus(void *cominterface, uint32_t
     assert(cominterface != NULL);
     assert(status != NULL);
 
-    *status = 5; // DSBSTATUS_PLAYING | DSBSTATUS_LOOPING
+    *status = DSBSTATUS_PLAYING | DSBSTATUS_LOOPING;
     return 0;
 }
 
@@ -621,7 +615,7 @@ API_CALLBACK void *USER32_CreateWindowExA(
     SDL_SetWindowData(window, WINDOWDATA_WINDOWPROC, class->windowProc);
 
     // Generate window creation event
-    class->windowProc((void *)window, 1 /* WM_CREATE */, 0, 0);
+    class->windowProc((void *)window, WM_CREATE, 0, 0);
 
     return window;
 }
@@ -656,11 +650,17 @@ API_CALLBACK uint32_t USER32_PeekMessageA(
             // But we also send any other messge as WM_PAINT so we can keep
             // wndProc busy and receive calls to DefWindowProcA later
             uint32_t message = event.window.event == SDL_WINDOWEVENT_CLOSE
-                ? 2 /* WM_DESTROY */ : 15 /* WM_PAINT */;
+                ? WM_DESTROY : WM_PAINT;
 
             SDL_Window *window = SDL_GetWindowFromID(event.window.windowID);
             *(void **)((char *)msg + 0) = window;
             *(uint32_t *)((char *)msg + 4) = message;
+            *(uintptr_t *)((char *)msg + 8) = 0;
+            *(intptr_t *)((char *)msg + 12) = 0;
+            return 1;
+        } else if (event.type == SDL_QUIT) {
+            *(void **)((char *)msg + 0) = NULL;
+            *(uint32_t *)((char *)msg + 4) = WM_QUIT;
             *(uintptr_t *)((char *)msg + 8) = 0;
             *(intptr_t *)((char *)msg + 12) = 0;
             return 1;
@@ -720,7 +720,7 @@ API_CALLBACK uint32_t USER32_DialogBoxIndirectParamA(
 {
     LOG_EMULATED();
 
-    dialogFunc(NULL, 0x111 /* WM_COMMAND */, 1 /* Accept button */, 12345);
+    dialogFunc(NULL, WM_COMMAND, 1 /* Accept button */, 12345);
 
     if (resolution_hack) {
         ushort *resolutionTable = (ushort *)0x410027;
@@ -781,11 +781,11 @@ API_CALLBACK int USER32_GetSystemMetrics(int index)
 {
     LOG_EMULATED();
 
-    if (index == 0) // SM_CXSCREEN
+    if (index == SM_CXSCREEN)
         return 1920;
-    else if (index == 1) // SM_CYSCREEN
+    else if (index == SM_CYSCREEN)
         return 1080;
-    else if (index == 4) // SM_CYSCAPTION
+    else if (index == SM_CYSCAPTION)
         return 19;
     else
         assert(0);
@@ -796,7 +796,7 @@ API_CALLBACK uint32_t USER32_SystemParametersInfoA(
 {
     LOG_EMULATED();
 
-    assert(action == 5); // SPI_GETBORDER
+    assert(action == SPI_GETBORDER);
     assert(wparam == 0);
     assert(pparam != NULL);
     assert(winini == 0);
@@ -1064,7 +1064,7 @@ API_CALLBACK void *DDRAW_CreateSurface(
     DDRAW_Object *ddraw = (DDRAW_Object *)cominterface;
     assert(ddraw->window != NULL);
 
-    bool is_primary_surface = *(uint32_t *)((uint8_t *)surface_desc + 104) & 0x200; // DDSCAPS_PRIMARYSURFACE
+    bool is_primary_surface = *(uint32_t *)((uint8_t *)surface_desc + 104) & DDSCAPS_PRIMARYSURFACE;
     uint32_t raw_height = *(uint32_t *)((uint8_t *)surface_desc + 8);
     uint32_t raw_width = *(uint32_t *)((uint8_t *)surface_desc + 12);
     assert(raw_height < INT_MAX && raw_width < INT_MAX);
@@ -1119,7 +1119,7 @@ API_CALLBACK void *DDRAW_SetCooperativeLevel(
     assert(ddraw->window == NULL);
     ddraw->window = (SDL_Window *)hwnd;
 
-    if (flags & 0x11 /* DDSCL_FULLSCREEN | DDSCL_EXCLUSIVE */) {
+    if (flags & (DDSCL_FULLSCREEN | DDSCL_EXCLUSIVE)) {
         SDL_SetWindowFullscreen(ddraw->window, SDL_WINDOW_FULLSCREEN_DESKTOP);
     }
 
