@@ -29,6 +29,8 @@ static bool resolution_hack = false;
 static bool valgrind_hack = false;
 #define SPEEDUP_FACTOR 1
 
+static uint32_t frame_counter = 0;
+
 #ifdef __GNUC__
 #define UNUSED(x) UNUSED_ ## x __attribute__((__unused__))
 #else
@@ -47,10 +49,6 @@ static bool valgrind_hack = false;
 // we need to make sure the stack is properly re-aligned after HEAVEN7 de-aligned it,
 // or the SSE instructions will cause a crash due to an unaligned load/store
 #define API_CALLBACK __attribute__((stdcall)) __attribute__((force_align_arg_pointer))
-
-#define STUB() do { printf("[!] %s STUB!\n", __func__); raise(SIGSEGV); } while(0)
-
-static uint32_t frame_counter = 0;
 
 typedef struct SymbolTable
 {
@@ -109,9 +107,15 @@ static API_CALLBACK void *DSOUND_SoundBufferImpl_GetStatus(void *cominterface, u
     return 0;
 }
 
-static API_CALLBACK void DSOUND_SoundBufferImpl_Restore(void)
+static API_CALLBACK void *DSOUND_SoundBufferImpl_Restore(void *cominterface)
 {
-    STUB();
+    // This is never called in practice since our GetStatus does never return
+    // status = 2 (DSBSTATUS_BUFFERLOST) since there isn't a SDL equivalent
+    LOG_EMULATED();
+
+    assert(cominterface != NULL);
+
+    return 0;
 }
 
 static API_CALLBACK void *DSOUND_SoundBufferImpl_Lock(
@@ -516,7 +520,6 @@ static API_CALLBACK void *KERNEL32_GetModuleHandleA(const char *moduleName)
 static API_CALLBACK void KERNEL32_ExitProcess(uint32_t exitcode)
 {
     LOG_EMULATED();
-    assert(exitcode < INT_MAX);
     exit((int)exitcode);
 }
 
@@ -813,9 +816,11 @@ static API_CALLBACK uint32_t USER32_EndDialog(void *UNUSED(hdlg), intptr_t UNUSE
 
 // **MISC**
 
-static API_CALLBACK void USER32_MessageBoxA(void)
+static API_CALLBACK int USER32_MessageBoxA(void *hwnd, const char *text, const char *caption, uint32_t UNUSED(type))
 {
-    STUB();
+    LOG_EMULATED();
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, caption, text, (SDL_Window *)hwnd);
+    return 1;
 }
 
 static API_CALLBACK uint32_t USER32_OffsetRect(void *rect, int UNUSED(dx), int UNUSED(dy))
@@ -969,6 +974,17 @@ static API_CALLBACK void *DDRAW_Surface_IsLost(void *cominterface)
     return 0;
 }
 
+static API_CALLBACK void *DDRAW_Surface_Restore(void *cominterface)
+{
+    // This is never called in practice since our IsLost does never return
+    // true since there isn't a SDL equivalent
+    LOG_EMULATED();
+
+    assert(cominterface != NULL);
+
+    return 0;
+}
+
 static API_CALLBACK void *DDRAW_Surface_Lock(void *cominterface, void *rect, void *surface_desc, uint32_t flags, void *event)
 {
     LOG_EMULATED();
@@ -991,11 +1007,6 @@ static API_CALLBACK void *DDRAW_Surface_Lock(void *cominterface, void *rect, voi
     *((void **)surface_desc+0x24/4) = surfaceobj->pixbuf;
 
     return 0;
-}
-
-static API_CALLBACK void DDRAW_Surface_Restore(void)
-{
-    STUB();
 }
 
 static API_CALLBACK void *DDRAW_Surface_SetClipper(void *cominterface, void *clipper)
