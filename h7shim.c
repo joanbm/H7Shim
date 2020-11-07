@@ -10,7 +10,7 @@
 #define IMAGESIZE 0x2E000
 #define ENTRYPOINT 0x42C8A0
 
-static bool valgrind_hack = false;
+static const bool valgrind_hack = false;
 
 typedef void (*entrypoint_t)(void);
 

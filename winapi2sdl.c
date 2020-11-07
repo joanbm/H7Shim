@@ -17,7 +17,7 @@
 #define SETTING_NOTEXT 0 // 0 or 1
 #define SETTING_LOOP 0 // 0 or 1
 
-static bool resolution_hack = false;
+static const bool resolution_hack = false;
 #define SPEEDUP_FACTOR 1
 
 #ifdef __GNUC__
@@ -41,12 +41,12 @@ typedef struct SymbolTable
 typedef struct LibraryTable
 {
     const char *libraryName;
-    SymbolTable *symbolTable;
+    const SymbolTable *symbolTable;
 } LibraryTable;
 
 #define MAKE_SYMBOL_ORDINAL(ord) ((char *)(uint32_t)(ord))
 
-static LibraryTable *GLOBAL_LIBRARY_TABLE;
+static const LibraryTable *GLOBAL_LIBRARY_TABLE;
 
 // ------
 // DSOUND
@@ -54,7 +54,7 @@ static LibraryTable *GLOBAL_LIBRARY_TABLE;
 
 typedef struct DSound_SoundBufferImpl_Object
 {
-    void *vtable;
+    const void *vtable;
 
     bool is_primary;
     uint8_t *audio_buffer;
@@ -200,7 +200,7 @@ static API_CALLBACK void *DSOUND_SoundBufferImpl_Release(void *cominterface)
     return 0;
 }
 
-static void *DSound_SoundBufferImpl_VTABLE[256] = {
+static const void *DSound_SoundBufferImpl_VTABLE[256] = {
     [0x24/4] = DSOUND_SoundBufferImpl_GetStatus,
     [0x50/4] = DSOUND_SoundBufferImpl_Restore,
     [0x2C/4] = DSOUND_SoundBufferImpl_Lock,
@@ -302,16 +302,16 @@ static API_CALLBACK void *DSOUND_Release(void *cominterface)
     return 0;
 }
 
-static void *DSOUND_VTABLE[256] = {
+static const void *DSOUND_VTABLE[256] = {
     [0x0C/4] = DSOUND_CreateSoundBuffer,
     [0x18/4] = DSOUND_SetCooperativeLevel,
     [0x8/4] = DSOUND_Release,
 };
 
-static struct DSOUND_Object
+typedef struct DSOUND_Object
 {
-    void *vtable;
-} DSOUND_NULLOBJECT = { DSOUND_VTABLE };
+    const void *vtable;
+} DSOUND_Object;
 
 static API_CALLBACK void *DSOUND_DirectSoundCreate(
    void *guid, void **lpds, void *unkouter)
@@ -322,11 +322,12 @@ static API_CALLBACK void *DSOUND_DirectSoundCreate(
     assert(lpds != NULL);
     assert(unkouter == NULL);
 
+    static DSOUND_Object DSOUND_NULLOBJECT = { DSOUND_VTABLE };
     *lpds = &DSOUND_NULLOBJECT;
     return 0;
 }
 
-static SymbolTable DSOUND_SYMBOLS[] = {
+static const SymbolTable DSOUND_SYMBOLS[] = {
     { MAKE_SYMBOL_ORDINAL(0x0001), DSOUND_DirectSoundCreate },
     { NULL, NULL }
 };
@@ -487,8 +488,8 @@ API_CALLBACK void *KERNEL32_LoadLibraryA(const char *libraryName)
 
     assert(libraryName != NULL);
 
-    LibraryTable *found = NULL;
-    for (LibraryTable *l = GLOBAL_LIBRARY_TABLE; l->libraryName != NULL; l++) {
+    const LibraryTable *found = NULL;
+    for (const LibraryTable *l = GLOBAL_LIBRARY_TABLE; l->libraryName != NULL; l++) {
         if (strcasecmp(l->libraryName, libraryName) == 0) {
             found = l;
             break;
@@ -499,7 +500,7 @@ API_CALLBACK void *KERNEL32_LoadLibraryA(const char *libraryName)
         fprintf(stderr, "WARNING: Library '%s' not found.\n", libraryName);
     }
 
-    return found;
+    return (void *)found;
 }
 
 static bool symbol_is_ordinal(const char *p)
@@ -521,10 +522,10 @@ API_CALLBACK void *KERNEL32_GetProcAddress(void *module, const char *procName)
     assert(module != NULL);
     assert(procName != NULL);
 
-    LibraryTable *lib = (LibraryTable *)module;
-    SymbolTable *found = NULL;
+    const LibraryTable *lib = (const LibraryTable *)module;
+    const SymbolTable *found = NULL;
 
-    for (SymbolTable *s = lib->symbolTable; s->symbolName != NULL; s++) {
+    for (const SymbolTable *s = lib->symbolTable; s->symbolName != NULL; s++) {
         if (symbol_compare(s->symbolName, procName)) {
             found = s;
             break;
@@ -540,7 +541,7 @@ API_CALLBACK void *KERNEL32_GetProcAddress(void *module, const char *procName)
     return found != NULL ? found->symbol : NULL;
 }
 
-static SymbolTable KERNEL32_SYMBOLS[] = {
+static const SymbolTable KERNEL32_SYMBOLS[] = {
     { "GetCommandLineA", KERNEL32_GetCommandLineA },
     { "GlobalFree", KERNEL32_GlobalFree },
     { "CreateThread", KERNEL32_CreateThread },
@@ -576,7 +577,7 @@ typedef struct USER32_WindowClassObject
 } USER32_WindowClassObject;
 
 static USER32_WindowClassObject *WINDOWCLASS_HEAD = NULL;
-static char *WINDOWDATA_WINDOWPROC = "WindowProc";
+static const char *WINDOWDATA_WINDOWPROC = "WindowProc";
 
 static API_CALLBACK void *USER32_RegisterClassA(const void *wndClass)
 {
@@ -814,7 +815,7 @@ static API_CALLBACK void *USER32_SetCursor(void *cursor)
     return NULL;
 }
 
-static SymbolTable USER32_SYMBOLS[] = {
+static const SymbolTable USER32_SYMBOLS[] = {
     { "CreateWindowExA", USER32_CreateWindowExA },
     { "EndDialog", USER32_EndDialog },
     { "OffsetRect", USER32_OffsetRect },
@@ -846,7 +847,7 @@ static API_CALLBACK uint32_t WINMM_timeGetTime(void)
     return SDL_GetTicks() * SPEEDUP_FACTOR;
 }
 
-static SymbolTable WINMM_SYMBOLS[] = {
+static const SymbolTable WINMM_SYMBOLS[] = {
     { "timeGetTime", WINMM_timeGetTime },
     { NULL, NULL }
 };
@@ -857,11 +858,9 @@ static SymbolTable WINMM_SYMBOLS[] = {
 
 typedef struct DDRAW_Surface_Object
 {
-    void *vtable;
+    const void *vtable;
 
     bool is_primary;
-    int width;
-    int height;
     SDL_Renderer *renderer;
     SDL_Texture *texture;
 
@@ -988,7 +987,7 @@ static API_CALLBACK void *DDRAW_Surface_Unlock(void *cominterface, void *rect)
     return  0;
 }
 
-static void *DDRAW_Surface_VTABLE[256] = {
+static const void *DDRAW_Surface_VTABLE[256] = {
     [0x08/4] = DDRAW_Surface_Release,
     [0x14/4] = DDRAW_Surface_Blt,
     [0x58/4] = DDRAW_Surface_GetSurfaceDesc,
@@ -1018,19 +1017,19 @@ static API_CALLBACK void *DDRAW_Clipper_SetHWnd(void *cominterface, uint32_t fla
     return 0;
 }
 
-static void *DDRAW_Clipper_VTABLE[256] = {
+static const void *DDRAW_Clipper_VTABLE[256] = {
     [0x08/4] = DDRAW_Clipper_Release,
     [0x20/4] = DDRAW_Clipper_SetHWnd,
 };
 
-static struct DDRAW_Clipper_Object
+typedef struct DDRAW_Clipper_Object
 {
-    void *vtable;
-} DDRAW_Clipper_NULLOBJECT = { DDRAW_Clipper_VTABLE };
+    const void *vtable;
+} DDRAW_Clipper_Object;
 
 typedef struct DDRAW_Object
 {
-    void *vtable;
+    const void *vtable;
     SDL_Window *window;
 } DDRAW_Object;
 
@@ -1052,6 +1051,7 @@ static API_CALLBACK void *DDRAW_CreateClipper(void *cominterface, uint32_t flags
     assert(clipper != NULL);
     assert(outer == 0);
 
+    static DDRAW_Clipper_Object DDRAW_Clipper_NULLOBJECT = { DDRAW_Clipper_VTABLE };
     *clipper = &DDRAW_Clipper_NULLOBJECT;
     return 0;
 }
@@ -1076,8 +1076,6 @@ static API_CALLBACK void *DDRAW_CreateSurface(
     DDRAW_Surface_Object *surfaceobj = malloc(sizeof(DDRAW_Surface_Object));
     surfaceobj->vtable = DDRAW_Surface_VTABLE;
     surfaceobj->is_primary = is_primary_surface;
-    surfaceobj->width = !is_primary_surface ? width : 0;
-    surfaceobj->height = !is_primary_surface ? height : 0;
     surfaceobj->renderer = NULL;
     surfaceobj->texture = NULL;
     surfaceobj->pixbuf = NULL;
@@ -1140,7 +1138,7 @@ static API_CALLBACK void *DDRAW_SetDisplayMode(void *cominterface,
     return 0;
 }
 
-static void *DDRAW_VTABLE[256] = {
+static const void *DDRAW_VTABLE[256] = {
     [0x08/4] = DDRAW_Release,
     [0x10/4] = DDRAW_CreateClipper,
     [0x18/4] = DDRAW_CreateSurface,
@@ -1165,7 +1163,7 @@ static API_CALLBACK void *DDRAW_DirectDrawCreate(
     return 0;
 }
 
-static SymbolTable DDRAW_SYMBOLS[] = {
+static const SymbolTable DDRAW_SYMBOLS[] = {
     { "DirectDrawCreate", DDRAW_DirectDrawCreate },
     { NULL, NULL }
 };
@@ -1174,7 +1172,7 @@ static SymbolTable DDRAW_SYMBOLS[] = {
 // SETUP
 // -----
 
-static LibraryTable GLOBAL_LIBRARY_TABLE_TMP[] = {
+static const LibraryTable GLOBAL_LIBRARY_TABLE_TMP[] = {
     { "ddraw.dll", DDRAW_SYMBOLS },
     { "dsound.dll", DSOUND_SYMBOLS },
     { "kernel32.dll", KERNEL32_SYMBOLS },
@@ -1183,7 +1181,7 @@ static LibraryTable GLOBAL_LIBRARY_TABLE_TMP[] = {
     { NULL, NULL }
 };
 
-static LibraryTable *GLOBAL_LIBRARY_TABLE = GLOBAL_LIBRARY_TABLE_TMP;
+static const LibraryTable *GLOBAL_LIBRARY_TABLE = GLOBAL_LIBRARY_TABLE_TMP;
 
 static int is_simple_command(const char *s) {
     for (size_t i = 0; i < strlen(s); i++)
