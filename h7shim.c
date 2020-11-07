@@ -46,11 +46,14 @@ static void hook(void *origin, void *destination) {
     *trampolinep++ = 0x55; // PUSH EBP
     *trampolinep++ = 0x56; // PUSH ESI
     *trampolinep++ = 0x57; // PUSH EDI
+
+    *trampolinep++ = 0x54; // PUSH ESP
     *trampolinep++ = 0xB8; // MOV EAX, ...
     for (size_t i = 0; i < 4; i++)
         *trampolinep++ = (uintptr_t)destination >> (i * 8);
     *trampolinep++ = 0xFF; // CALL EAX
     *trampolinep++ = 0xD0;
+
     *trampolinep++ = 0x5F; // POP EDI
     *trampolinep++ = 0x5E; // POP ESI
     *trampolinep++ = 0x5D; // POP EBP
@@ -68,14 +71,14 @@ static void hook(void *origin, void *destination) {
     *originp++ = 0xC3; // RETN
 }
 
-#define HOOK_CALLBACK __attribute__((cdecl))
+#define HOOK_CALLBACK __attribute__((stdcall))
 
 #define CLOBBER_ALL "edi", "esi", "ebp", "ebx", "edx", "ecx", "eax", "memory"
 
 // -----
 // HOOKS
 // -----
-static HOOK_CALLBACK void Main_40168C(RegSet regs) {
+static HOOK_CALLBACK void Main_40168C(RegSet *UNUSED(regs)) {
     const char *cmdp = KERNEL32_GetCommandLineA();
     if (*cmdp == '"') {
         // Quoted string -> Advance until quotes closed
@@ -102,6 +105,26 @@ static HOOK_CALLBACK void Main_40168C(RegSet regs) {
     // This is buggy in HEAVEN7W and calls ExitProcess(return address of entrypoint),
     // which is basically a "random" value, so just return whatever we want here
     KERNEL32_ExitProcess(0x12345678);
+}
+
+static HOOK_CALLBACK void PumpMessages_4016CC(RegSet *regs) {
+    regs->EAX = 0;
+    MSG msg;
+    while (USER32_PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE) != 0)
+    {
+        if (msg.message == WM_KEYDOWN)
+            regs->EAX = msg.wParam;
+        else if (msg.message == WM_SYSKEYDOWN)
+            regs->EAX = msg.wParam | 0x10000;
+        else if (msg.message == WM_QUIT)
+        {
+            regs->EAX = 0xFFFFFFFF;
+            return;
+        }
+        USER32_DispatchMessageA(&msg);
+    }
+    if (*((uint8_t *)0x429880) == 1)
+        regs->EAX = 0xFFFFFFFF;
 }
 
 // --------
@@ -174,6 +197,7 @@ int main(int argc, char *argv[]) {
             *(uint8_t *)0x40B804 = 0x90; // NOP
         } else if (ExecMode == ExecMode_UnpackAndHook) {
             hook((void *)0x40168C, Main_40168C);
+            hook((void *)0x4016CC, PumpMessages_4016CC);
         }
 
         // Jump back to the main program
