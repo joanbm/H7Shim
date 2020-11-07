@@ -67,7 +67,7 @@ API_CALLBACK void KERNEL32_Sleep(uint32_t timems);
 API_CALLBACK void *KERNEL32_LoadLibraryA(const char *libraryName);
 API_CALLBACK void *KERNEL32_GetProcAddress(void *module, const char *procName);
 
-typedef intptr_t (*DialogProc)(void *hdlg, uint32_t msg, uintptr_t wparam, intptr_t lparam);
+typedef intptr_t (*DialogProc)(void *hdlg, uint32_t msg, uintptr_t wParam, intptr_t lParam);
 typedef struct MSG
 {
     void *hwnd;
@@ -93,8 +93,8 @@ API_CALLBACK void *USER32_CreateWindowExA(
     int x, int y, int width, int height,
     void *hwndParent, void *menu, void *instance, void *pparam);
 API_CALLBACK uint32_t USER32_ShowWindow(void *hwnd, uint32_t cmdshow);
-API_CALLBACK void USER32_DefWindowProcA(void *hwnd, uint32_t msg,
-    uintptr_t wparam, intptr_t lparam);
+API_CALLBACK intptr_t USER32_DefWindowProcA(void *hwnd, uint32_t msg,
+    uintptr_t wParam, intptr_t lParam);
 API_CALLBACK uint32_t USER32_PeekMessageA(
       void *msg, void *hWnd,
       uint32_t msgFilterMin, uint32_t msgFilterMax,
@@ -107,13 +107,13 @@ API_CALLBACK uint32_t USER32_DialogBoxIndirectParamA(
     void *instance, void *dialogTemplate,
     void *hwndParent, DialogProc dialogFunc, void *initParam);
 API_CALLBACK intptr_t USER32_SendDlgItemMessageA(void *hdlg,
-    int controlid, uint32_t msg, uintptr_t wparam, intptr_t lparam);
+    int controlid, uint32_t msg, uintptr_t wParam, intptr_t lParam);
 API_CALLBACK uint32_t USER32_EndDialog(void *hdlg, intptr_t result);
 API_CALLBACK int USER32_MessageBoxA(void *hwnd, const char *text, const char *caption, uint32_t type);
 API_CALLBACK uint32_t USER32_OffsetRect(void *rect, int dx, int dy);
 API_CALLBACK int USER32_GetSystemMetrics(int index);
 API_CALLBACK uint32_t USER32_SystemParametersInfoA(
-    uint32_t action, uint32_t wparam, void *pparam, uint32_t winini);
+    uint32_t action, uint32_t wParam, void *pparam, uint32_t winini);
 API_CALLBACK void *USER32_SetCursor(void *cursor);
 
 API_CALLBACK uint32_t WINMM_timeGetTime(void);

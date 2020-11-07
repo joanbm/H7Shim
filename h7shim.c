@@ -99,7 +99,7 @@ static HOOK_CALLBACK void Main_40168C(RegSet *UNUSED(regs)) {
     // Call into entry
     asm ("movl %0, %%eax\n\t"
          "movl $0x401131, %%esi\n\t"
-         "call %%esi\n\t"
+         "call *%%esi\n\t"
          : : "g"(cmdp) : CLOBBER_ALL);
 
     // This is buggy in HEAVEN7W and calls ExitProcess(return address of entrypoint),
@@ -125,6 +125,52 @@ static HOOK_CALLBACK void PumpMessages_4016CC(RegSet *regs) {
     }
     if (*((uint8_t *)0x429880) == 1)
         regs->EAX = 0xFFFFFFFF;
+}
+
+static void *GetSomething_40C4E4_Impl() {
+    return *(void **)0x42A404;
+}
+
+static HOOK_CALLBACK void GetSomething_40C4E4(RegSet *regs) {
+    regs->EBP = (uintptr_t)GetSomething_40C4E4_Impl();
+}
+
+static intptr_t WindowProc_40172F_Impl(void *hwnd, uint32_t msg, uintptr_t wParam, intptr_t lParam) {
+    void *p = GetSomething_40C4E4_Impl();
+    if (*((uint8_t *)p + 0x18) & 1)
+        USER32_SetCursor(NULL);
+
+    if (msg == WM_CREATE) {
+        *((uint8_t *)0x429880) = 0;
+        return 0;
+    }
+    if (msg == WM_DESTROY) {
+        *((uint8_t *)0x429880) = 1;
+        return 0;
+    }
+
+    return USER32_DefWindowProcA(hwnd, msg, wParam, lParam);
+}
+
+static HOOK_CALLBACK void WindowProc_40172F(RegSet *regs) {
+    void *hwnd = *(void **)(regs->ESP + 4);
+    uint32_t message = *(uint32_t *)(regs->ESP + 8);
+    uintptr_t wParam = *(uint32_t *)(regs->ESP + 12);
+    intptr_t lParam = *(uint32_t *)(regs->ESP + 16);
+    *(uint32_t *)(regs->ESP + 16) = *(uint32_t *)regs->ESP; // Fixup return
+    regs->ESP += 16; // Consume args
+
+    regs->EAX = WindowProc_40172F_Impl(hwnd, message, wParam, lParam);
+}
+
+static HOOK_CALLBACK void FreeMemory_4017A9_Impl(void *ptr) {
+    if (ptr != NULL)
+        KERNEL32_GlobalFree(ptr);
+}
+
+static HOOK_CALLBACK void FreeMemory_4017A9(RegSet *regs) {
+    void *ptr = (void *)regs->EAX;
+    FreeMemory_4017A9_Impl(ptr);
 }
 
 // --------
@@ -197,7 +243,10 @@ int main(int argc, char *argv[]) {
             *(uint8_t *)0x40B804 = 0x90; // NOP
         } else if (ExecMode == ExecMode_UnpackAndHook) {
             hook((void *)0x40168C, Main_40168C);
+            hook((void *)0x40C4E4, GetSomething_40C4E4);
             hook((void *)0x4016CC, PumpMessages_4016CC);
+            hook((void *)0x40172F, WindowProc_40172F);
+            hook((void *)0x4017A9, FreeMemory_4017A9);
         }
 
         // Jump back to the main program

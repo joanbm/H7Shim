@@ -561,7 +561,7 @@ static const SymbolTable KERNEL32_SYMBOLS[] = {
 
 // **WINDOW**
 
-typedef intptr_t (*WindowProc)(void *hwnd, uint32_t msg, uintptr_t wparam, intptr_t lparam);
+typedef intptr_t (*WindowProc)(void *hwnd, uint32_t msg, uintptr_t wParam, intptr_t lParam);
 
 typedef struct USER32_WindowClassObject
 {
@@ -630,10 +630,11 @@ API_CALLBACK uint32_t USER32_ShowWindow(void *hwnd, uint32_t cmdshow)
     return 0;
 }
 
-API_CALLBACK void USER32_DefWindowProcA(void *UNUSED(hwnd), uint32_t UNUSED(msg),
-    uintptr_t UNUSED(wparam), intptr_t UNUSED(lparam))
+API_CALLBACK intptr_t USER32_DefWindowProcA(void *UNUSED(hwnd), uint32_t UNUSED(msg),
+    uintptr_t UNUSED(wParam), intptr_t UNUSED(lParam))
 {
     LOG_EMULATED();
+    return 0;
 }
 
 API_CALLBACK uint32_t USER32_PeekMessageA(
@@ -676,11 +677,11 @@ API_CALLBACK void USER32_DispatchMessageA(const void *msg)
 
     SDL_Window *window = (SDL_Window *)*(const void **)((const char *)msg + 0);
     uint32_t message = *(const uint32_t *)((const char *)msg + 4);
-    uintptr_t wparam = *(const uintptr_t *)((const char *)msg + 8);
-    intptr_t lparam = *(const intptr_t *)((const char *)msg + 12);
+    uintptr_t wParam = *(const uintptr_t *)((const char *)msg + 8);
+    intptr_t lParam = *(const intptr_t *)((const char *)msg + 12);
 
     WindowProc windowProc = (WindowProc)SDL_GetWindowData(window, WINDOWDATA_WINDOWPROC);
-    windowProc(window, message, wparam, lparam);
+    windowProc(window, message, wParam, lParam);
 }
 
 API_CALLBACK uint32_t USER32_DestroyWindow(void *hwnd)
@@ -733,7 +734,7 @@ API_CALLBACK uint32_t USER32_DialogBoxIndirectParamA(
 }
 
 API_CALLBACK intptr_t USER32_SendDlgItemMessageA(void *UNUSED(hdlg),
-    int controlid, uint32_t UNUSED(msg), uintptr_t UNUSED(wparam), intptr_t UNUSED(lparam))
+    int controlid, uint32_t UNUSED(msg), uintptr_t UNUSED(wParam), intptr_t UNUSED(lParam))
 {
     LOG_EMULATED();
 
@@ -792,12 +793,12 @@ API_CALLBACK int USER32_GetSystemMetrics(int index)
 }
 
 API_CALLBACK uint32_t USER32_SystemParametersInfoA(
-    uint32_t action, uint32_t wparam, void *pparam, uint32_t winini)
+    uint32_t action, uint32_t wParam, void *pparam, uint32_t winini)
 {
     LOG_EMULATED();
 
     assert(action == SPI_GETBORDER);
-    assert(wparam == 0);
+    assert(wParam == 0);
     assert(pparam != NULL);
     assert(winini == 0);
 
