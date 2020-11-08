@@ -87,6 +87,7 @@ typedef struct MSG
 #define SM_CYSCREEN 1
 #define SM_CYSCAPTION 4
 #define SPI_GETBORDER 5
+#define MB_ICONERROR 0x10
 API_CALLBACK void *USER32_RegisterClassA(const void *wndClass);
 API_CALLBACK void *USER32_CreateWindowExA(
     uint32_t exStyle, const char *className, const char *windowName, uint32_t style,

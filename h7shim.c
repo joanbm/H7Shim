@@ -163,6 +163,31 @@ static HOOK_CALLBACK void WindowProc_40172F(RegSet *regs) {
     regs->EAX = WindowProc_40172F_Impl(hwnd, message, wParam, lParam);
 }
 
+static HOOK_CALLBACK uint32_t MessageBoxError_4017D3_Impl(const char *msg) {
+    USER32_MessageBoxA(NULL, msg, "Heaven 7", MB_ICONERROR);
+    return 0xFFFFFFFF;
+}
+
+static HOOK_CALLBACK void MessageBoxError_4017D3(RegSet *regs) {
+    char *msg = (char *)regs->EAX;
+    regs->EAX = (unsigned)MessageBoxError_4017D3_Impl(msg);
+}
+
+static HOOK_CALLBACK void *AllocMemory_401778_Impl(size_t size) {
+    void *ptr = KERNEL32_GlobalAlloc(0, size);
+    if (ptr == NULL)
+        KERNEL32_ExitProcess(MessageBoxError_4017D3_Impl("Out of memory!"));
+
+    for (size_t i = 0; i < size; i++)
+        *((char *)ptr + i) = 0;
+
+    return ptr;
+}
+
+static HOOK_CALLBACK void AllocMemory_401778(RegSet *regs) {
+    regs->EAX = (uintptr_t)AllocMemory_401778_Impl(regs->EAX);
+}
+
 static HOOK_CALLBACK void FreeMemory_4017A9_Impl(void *ptr) {
     if (ptr != NULL)
         KERNEL32_GlobalFree(ptr);
@@ -246,7 +271,9 @@ int main(int argc, char *argv[]) {
             hook((void *)0x40C4E4, GetSomething_40C4E4);
             hook((void *)0x4016CC, PumpMessages_4016CC);
             hook((void *)0x40172F, WindowProc_40172F);
+            hook((void *)0x401778, AllocMemory_401778);
             hook((void *)0x4017A9, FreeMemory_4017A9);
+            hook((void *)0x4017D3, MessageBoxError_4017D3);
         }
 
         // Jump back to the main program
