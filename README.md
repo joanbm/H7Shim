@@ -27,7 +27,7 @@ sudo apt install build-essential cmake curl unzip gcc-multilib libsdl2-dev:i386
 
 Then, build H7Shim, download the "heaven seven" demo, and run it as follows:
 ```sh
-cmake . && make
+cmake -B build && cmake --build build
 ./download_HEAVEN7W.sh
-./h7shim
+build/h7shim
 ```
