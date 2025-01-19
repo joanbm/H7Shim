@@ -2,6 +2,8 @@ H7Shim
 ======
 A program to run the "[heaven seven](https://www.pouet.net/prod.php?which=5)" 64k demo by Exceed on Linux (or other platforms) via SDL.
 
+![Obligatory screenshot](screenshot.png)
+
 This works similarly to [Wine](https://www.winehq.org/): It runs the original executable and implements a translator from Win32/DirectDraw/DirectAudio/etc. API calls to SDL.
 
 Why? Wine already exists!
